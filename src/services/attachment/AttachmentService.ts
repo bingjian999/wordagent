@@ -5,6 +5,7 @@ import type { IAttachmentRepository } from "../../domain/attachment/IAttachmentR
 import type { Result } from "../../domain/attachment/Result.js";
 import { ok, err, ErrorCode } from "../../domain/attachment/Result.js";
 import type { FileIntelligenceService } from "../parser/FileIntelligenceService.js";
+import type { AuditLogger } from "../audit/AuditLogger.js";
 
 /**
  * Attachment Service — business logic layer.
@@ -15,9 +16,10 @@ import type { FileIntelligenceService } from "../parser/FileIntelligenceService.
  * - Persist files + metadata via IAttachmentRepository
  * - Enforce session isolation
  * - Provide read/delete operations with ownership checks
+ * - Log destructive operations via AuditLogger
  *
- * Depends on IAttachmentRepository (interface) and FileIntelligenceService.
- * Concrete repository is injected via DI container.
+ * Depends on IAttachmentRepository (interface), FileIntelligenceService,
+ * and AuditLogger. Concrete implementations are injected via DI container.
  */
 
 /** Input for uploading a file */
@@ -42,11 +44,16 @@ export interface ReadResult {
 }
 
 export class AttachmentService {
+  private readonly auditLogger: AuditLogger | null;
+
   constructor(
     private readonly repository: IAttachmentRepository,
     private readonly fileIntel: FileIntelligenceService,
     private readonly config: AppConfig,
-  ) {}
+    auditLogger?: AuditLogger,
+  ) {
+    this.auditLogger = auditLogger ?? null;
+  }
 
   // ================================================================
   // Upload
@@ -106,6 +113,11 @@ export class AttachmentService {
       await this.repository.save(sessionId, attachment);
     } catch {
       return err(ErrorCode.INTERNAL_ERROR);
+    }
+
+    // Audit log (best-effort, non-blocking)
+    if (this.auditLogger) {
+      await this.auditLogger.logUpload(sessionId, id, input.originalName, input.content.length);
     }
 
     return ok({ attachment });
@@ -205,15 +217,27 @@ export class AttachmentService {
   // ================================================================
 
   async delete(sessionId: string, id: string): Promise<Result<boolean, ErrorCode>> {
-    const exists = await this.repository.exists(sessionId, id);
-    if (!exists) return err(ErrorCode.ATTACHMENT_NOT_FOUND);
+    const attachment = await this.repository.findById(sessionId, id);
+    if (!attachment) return err(ErrorCode.ATTACHMENT_NOT_FOUND);
 
     const deleted = await this.repository.delete(sessionId, id);
+
+    // Audit log (best-effort, non-blocking)
+    if (deleted && this.auditLogger) {
+      await this.auditLogger.logDelete(sessionId, id, attachment.originalName);
+    }
+
     return ok(deleted);
   }
 
   async deleteBySession(sessionId: string): Promise<Result<number, ErrorCode>> {
     const count = await this.repository.deleteBySession(sessionId);
+
+    // Audit log (best-effort, non-blocking)
+    if (this.auditLogger) {
+      await this.auditLogger.logClear(sessionId, count);
+    }
+
     return ok(count);
   }
 

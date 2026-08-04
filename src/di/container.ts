@@ -4,6 +4,8 @@ import { FsAttachmentRepository } from "../infrastructure/fs/FsAttachmentReposit
 import { MockAttachmentRepository } from "../infrastructure/fs/MockAttachmentRepository.js";
 import { FileIntelligenceService } from "../services/parser/FileIntelligenceService.js";
 import { AttachmentService } from "../services/attachment/AttachmentService.js";
+import { AuditLogger } from "../services/audit/AuditLogger.js";
+import { RetentionPolicy } from "../services/retention/RetentionPolicy.js";
 
 /**
  * Service container holding all application service instances.
@@ -16,6 +18,10 @@ export interface ServiceContainer {
   fileIntel: FileIntelligenceService;
   /** Attachment business service */
   attachmentService: AttachmentService;
+  /** Audit logger (records destructive operations) */
+  auditLogger: AuditLogger;
+  /** Retention policy engine (auto-cleanup of expired sessions) */
+  retentionPolicy: RetentionPolicy;
   /** Application configuration */
   config: AppConfig;
 }
@@ -32,12 +38,20 @@ export interface ServiceContainer {
 export function createServices(config: AppConfig): ServiceContainer {
   const repository = new FsAttachmentRepository(config.storagePath);
   const fileIntel = new FileIntelligenceService();
-  const attachmentService = new AttachmentService(repository, fileIntel, config);
+  const auditLogger = new AuditLogger(config.storagePath);
+  const attachmentService = new AttachmentService(repository, fileIntel, config, auditLogger);
+  const retentionPolicy = new RetentionPolicy(
+    config.storagePath,
+    config.sessionTtl,
+    { log: console.log, error: console.error },
+  );
 
   return {
     repository,
     fileIntel,
     attachmentService,
+    auditLogger,
+    retentionPolicy,
     config,
   };
 }
@@ -52,12 +66,19 @@ export function createTestServices(
 ): ServiceContainer {
   const repo = repository ?? new MockAttachmentRepository();
   const fileIntel = new FileIntelligenceService();
-  const attachmentService = new AttachmentService(repo, fileIntel, config);
+  const auditLogger = new AuditLogger(config.storagePath);
+  const attachmentService = new AttachmentService(repo, fileIntel, config, auditLogger);
+  const retentionPolicy = new RetentionPolicy(
+    config.storagePath,
+    config.sessionTtl,
+  );
 
   return {
     repository: repo,
     fileIntel,
     attachmentService,
+    auditLogger,
+    retentionPolicy,
     config,
   };
 }
