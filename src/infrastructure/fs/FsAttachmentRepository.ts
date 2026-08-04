@@ -141,8 +141,8 @@ export class FsAttachmentRepository implements IAttachmentRepository {
       const metaPath = this.getMetaPath(sessionDir, id);
       const content = await fs.readFile(metaPath, "utf-8");
       return JSON.parse(content) as AttachmentInfo;
-    } catch (err: any) {
-      if (err.code === "ENOENT") return null;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw err;
     }
   }
@@ -177,8 +177,8 @@ export class FsAttachmentRepository implements IAttachmentRepository {
 
         // Populate cache
         this.setCachedAttachments(sessionId, attachments);
-      } catch (err: any) {
-        if (err.code === "ENOENT") {
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
           return { items: [], total: 0, page: opts?.page ?? 1, limit: opts?.limit ?? 20, totalPages: 1 };
         }
         throw err;
@@ -213,8 +213,8 @@ export class FsAttachmentRepository implements IAttachmentRepository {
     }
 
     // Delete metadata and file content
-    try { await fs.unlink(metaPath); } catch (e: any) { if (e.code !== "ENOENT") throw e; }
-    try { await fs.unlink(filePath); } catch (e: any) { if (e.code !== "ENOENT") throw e; }
+    try { await fs.unlink(metaPath); } catch (e: unknown) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
+    try { await fs.unlink(filePath); } catch (e: unknown) { if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e; }
 
     // Invalidate cache for this session
     this.invalidateCache(sessionId, id);
@@ -251,8 +251,8 @@ export class FsAttachmentRepository implements IAttachmentRepository {
       this.dirCache.delete(sessionDir);
 
       return count;
-    } catch (err: any) {
-      if (err.code === "ENOENT") return 0;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0;
       throw err;
     }
   }
@@ -274,8 +274,8 @@ export class FsAttachmentRepository implements IAttachmentRepository {
       const sessionDir = path.join(this.storagePath, safe);
       const entries = await fs.readdir(sessionDir);
       return entries.filter(e => e.endsWith(".meta.json")).length;
-    } catch (err: any) {
-      if (err.code === "ENOENT") return 0;
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return 0;
       throw err;
     }
   }

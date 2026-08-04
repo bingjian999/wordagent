@@ -1,6 +1,6 @@
 # WordAgent — Pi Agent 扩展工具集
 
-为 [Pi Agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) 构建的附件管理平台和通用工具扩展，围绕 Word 文档 / 财务会计场景提供文件管理、计算器、网页抓取、文件编辑、技能写入和沙箱命令执行能力。
+为 [Pi Agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) 构建的附件管理平台和通用工具扩展，围绕 Word 文档 / 财务会计场景提供文件管理、计算器、网页抓取、文件编辑、技能写入、沙箱命令执行和 Word 文档解析/生成能力。
 
 ## 快速开始
 
@@ -30,6 +30,7 @@ npx pi-coding-agent -e ./extensions/tools/index.ts -e ./extensions/attachments/i
 | `file_edit` | 文件编辑（write/append/replace/replace_lines/delete） | 路径遍历防护、工作目录锁定 |
 | `skill_write` | 沙箱内文件写入（仅 skills/ 目录） | 路径遍历防护、沙箱边界检查 |
 | `shell_exec` | 执行白名单 Shell 命令 | execFile（非 exec）、命令白名单、参数正则验证、超时、输出限制 |
+| `docx_operate` | Word 文档解析与生成（文本提取、报告生成） | 路径验证、结构化内容规格（段落/标题/表格） |
 
 ## 架构
 
@@ -40,6 +41,7 @@ src/
     attachment/            # 附件业务逻辑
     parser/                # 文件智能分析（哈希、编码检测、预览）
     shell/                 # Shell 命令注册表
+    docx/                  # Word 文档解析与生成（mammoth + docx）
   infrastructure/
     express/               # HTTP API（路由、中间件、服务器）
     fs/                    # 文件系统实现（FsAttachmentRepository）
@@ -50,7 +52,7 @@ src/
 extensions/
   demo/                    # 示例扩展
   attachments/             # 附件管理扩展
-  tools/                   # 工具扩展（5 个工具注册）
+  tools/                   # 工具扩展（6 个工具注册）
 skills/                    # SKILL.md 声明文件
 tests/
   unit/                    # 单元测试
@@ -92,10 +94,10 @@ tests/
 ## 测试
 
 ```bash
-npm run test:unit        # 单元测试（285 个）
-npm run test:integration # 集成测试（14 个）
-npm run test:e2e         # 端到端测试（42 个）
-npm run test:all         # 全量测试（341 个）
+npm run test:unit        # 单元测试（342 项）
+npm run test:integration # 集成测试（14 项）
+npm run test:e2e         # 端到端测试（42 项）
+npm run test:all         # 全量测试（398 项）
 npm run lint             # ESLint 检查
 npm run typecheck        # TypeScript 类型检查
 ```
@@ -120,6 +122,9 @@ GitHub Actions 管道（`.github/workflows/ci.yml`）在推送和 PR 时自动�
 | Phase 3 | ✅ | PathResolver 跨平台修复、CORS 通配符、ESLint、会话安全 |
 | Phase 4 | ✅ | Shell 沙箱、E2E 测试、CI/CD 管道 |
 | Phase 5 | ✅ | 性能基线、审计日志、数据保留、README、RC 版本 |
+| Phase 6 | ✅ | 内存缓存、并行扫描、审计日志轮转、性能优化 |
+| Phase 7 | ✅ | ShellTool 路径遍历防护、扩展名白名单绕过修复、安全验证 |
+| Phase 8 | ✅ | Word 文档集成（docx_operate：解析 + 生成）、生产发布准备、版本 1.0.0 |
 
 ## 技术栈
 
@@ -127,6 +132,7 @@ GitHub Actions 管道（`.github/workflows/ci.yml`）在推送和 PR 时自动�
 - **Framework**: @earendil-works/pi-coding-agent
 - **HTTP**: Express 4 + Multer + CORS + express-rate-limit
 - **Validation**: TypeBox
+- **Word 文档**: mammoth（解析）+ docx（生成）
 - **Testing**: Node.js built-in test runner (`node:test`)
 - **Linting**: ESLint 9 (Flat Config) + typescript-eslint
 

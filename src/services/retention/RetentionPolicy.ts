@@ -103,8 +103,9 @@ export class RetentionPolicy {
                 return { deleted: true, fileCount, error: null as string | null };
               }
               return { deleted: false, fileCount: 0, error: null as string | null };
-            } catch (err: any) {
-              return { deleted: false, fileCount: 0, error: `Session ${entry.name}: ${err.message}` as string | null };
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : String(err);
+              return { deleted: false, fileCount: 0, error: `Session ${entry.name}: ${message}` as string | null };
             }
           })
         );
@@ -117,10 +118,11 @@ export class RetentionPolicy {
           }
         }
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Storage path doesn't exist or isn't readable
-      if (err.code !== "ENOENT") {
-        errors.push(`Storage scan: ${err.message}`);
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+        const message = err instanceof Error ? err.message : String(err);
+        errors.push(`Storage scan: ${message}`);
       }
     }
 

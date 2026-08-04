@@ -3,6 +3,12 @@ import { ErrorCode } from "../../domain/attachment/Result.js";
 import { verify as verifySessionToken } from "../../auth/SessionToken.js";
 
 /**
+ * Express Request augmented with a verified session ID.
+ * Set by `createRequireSessionId` middleware.
+ */
+export type AuthenticatedRequest = Request & { sessionId: string };
+
+/**
  * Standardized error response builder.
  */
 export function buildError(code: ErrorCode, message: string, details?: Record<string, unknown>) {
@@ -43,7 +49,7 @@ export function createRequireSessionId(secret: string): (req: Request, res: Resp
       return;
     }
 
-    (req as any).sessionId = sessionId;
+    (req as AuthenticatedRequest).sessionId = sessionId;
     next();
   };
 }
@@ -68,21 +74,28 @@ export function asyncHandler<T extends Request = Request>(
 /**
  * Global error handler middleware.
  */
-export function errorHandler(err: any, _req: Request, res: Response, _next: NextFunction): void {
+export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction): void {
   console.error("[ERROR]", err);
 
+  // Safely extract properties from the error (which is typed as unknown)
+  const e = (typeof err === "object" && err !== null ? err : {}) as {
+    code?: string;
+    message?: string;
+    limit?: number;
+  };
+
   // Multer errors
-  if (err.code === "LIMIT_FILE_SIZE") {
-    sendError(res, 413, ErrorCode.FILE_TOO_LARGE, `File exceeds size limit`, { maxSize: err.limit });
+  if (e.code === "LIMIT_FILE_SIZE") {
+    sendError(res, 413, ErrorCode.FILE_TOO_LARGE, `File exceeds size limit`, { maxSize: e.limit });
     return;
   }
-  if (err.code === "LIMIT_FILE_COUNT") {
-    sendError(res, 400, ErrorCode.INVALID_INPUT, "Too many files in batch", { maxBatch: err.limit });
+  if (e.code === "LIMIT_FILE_COUNT") {
+    sendError(res, 400, ErrorCode.INVALID_INPUT, "Too many files in batch", { maxBatch: e.limit });
     return;
   }
 
   // Known error codes
-  if (err.code && Object.values(ErrorCode).includes(err.code)) {
+  if (e.code && Object.values(ErrorCode).includes(e.code as ErrorCode)) {
     const statusMap: Record<string, number> = {
       FILE_TOO_LARGE: 413,
       INVALID_EXTENSION: 400,
@@ -93,8 +106,8 @@ export function errorHandler(err: any, _req: Request, res: Response, _next: Next
       INVALID_INPUT: 400,
       INTERNAL_ERROR: 500,
     };
-    const status = statusMap[err.code] ?? 500;
-    sendError(res, status, err.code, err.message ?? err.code);
+    const status = statusMap[e.code] ?? 500;
+    sendError(res, status, e.code as ErrorCode, e.message ?? e.code);
     return;
   }
 

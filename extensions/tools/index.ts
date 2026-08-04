@@ -7,6 +7,7 @@
  *   - file_edit:             Edit local files (write/append/replace/replace_lines/delete)
  *   - skill_write:           Write files within the skills sandbox directory
  *   - shell_exec:            Execute whitelisted shell commands in a sandbox
+ *   - docx_operate:          Parse and generate Word (.docx) documents
  *
  * All tools are registered with the Pi Agent Extension API and share
  * tool service instances initialized in session_start.
@@ -20,6 +21,9 @@ import { WebFetchTool } from "../../src/tools/WebFetchTool.js";
 import { FileEditTool } from "../../src/tools/FileEditTool.js";
 import { SkillWriteTool } from "../../src/tools/SkillWriteTool.js";
 import { ShellTool } from "../../src/tools/ShellTool.js";
+import { DocxTool } from "../../src/tools/DocxTool.js";
+import type { ParagraphSpec } from "../../src/services/docx/DocxService.js";
+import type { TableSpec } from "../../src/services/docx/DocxService.js";
 
 // Module-level state for session-scoped tool instances
 let calcTool: CalculatorTool | null = null;
@@ -27,6 +31,7 @@ let webFetchTool: WebFetchTool | null = null;
 let fileEditTool: FileEditTool | null = null;
 let skillWriteTool: SkillWriteTool | null = null;
 let shellTool: ShellTool | null = null;
+let docxTool: DocxTool | null = null;
 
 export default function (pi: ExtensionAPI) {
   // ================================================================
@@ -40,15 +45,17 @@ export default function (pi: ExtensionAPI) {
     fileEditTool = new FileEditTool(projectDir);
     skillWriteTool = new SkillWriteTool(path.join(projectDir, "skills"));
     shellTool = new ShellTool(projectDir);
+    docxTool = new DocxTool();
 
     console.log("[Tools] All tools initialized.");
     console.log(`[Tools]   file_edit base: ${projectDir}`);
     console.log(`[Tools]   skill_write sandbox: ${skillWriteTool.getSandboxDir()}`);
     console.log(`[Tools]   shell_exec cwd: ${projectDir}`);
     console.log(`[Tools]   shell_exec allowed: ${shellTool.listAllowedCommands().join(", ")}`);
+    console.log("[Tools]   docx_operate ready (parse + generate)");
 
     if (ctx.hasUI) {
-      ctx.ui.notify("Word AI: Tools ready (calc, web_fetch, file_edit, skill_write, shell_exec)", "info");
+      ctx.ui.notify("Word AI: Tools ready (calc, web_fetch, file_edit, skill_write, shell_exec, docx_operate)", "info");
     }
   });
 
@@ -61,6 +68,7 @@ export default function (pi: ExtensionAPI) {
     fileEditTool = null;
     skillWriteTool = null;
     shellTool = null;
+    docxTool = null;
     console.log("[Tools] All tools cleaned up.");
   });
 
@@ -465,6 +473,146 @@ export default function (pi: ExtensionAPI) {
 
       return {
         content: [{ type: "text" as const, text: summary }],
+        details: result,
+      };
+    },
+  });
+
+  // ================================================================
+  // Tool: docx_operate
+  // ================================================================
+  pi.registerTool({
+    name: "docx_operate",
+    label: "Word Document Operations",
+    description:
+      "Parse and generate Word (.docx) documents. " +
+      "Operations: " +
+      "parse (extract text from a .docx file), " +
+      "generate (create a .docx from structured content with paragraphs, headings, and tables).",
+    promptSnippet: "Parse and generate Word (.docx) documents (text extraction, report generation)",
+    promptGuidelines: [
+      "Use docx_operate with operation 'parse' to extract text from a .docx file.",
+      "Use docx_operate with operation 'generate' to create a .docx document from paragraphs and tables.",
+    ],
+    parameters: Type.Object({
+      operation: Type.Union(
+        [Type.Literal("parse"), Type.Literal("generate")],
+        {
+          description:
+            "Operation: parse (extract text from .docx) or generate (create .docx from structured content)",
+        },
+      ),
+      filePath: Type.String({
+        description:
+          "For 'parse': path to the .docx file to read. " +
+          "For 'generate': output path for the generated .docx file.",
+      }),
+      title: Type.Optional(
+        Type.String({ description: "For 'generate' only. Document title placed at the top." }),
+      ),
+      paragraphs: Type.Optional(
+        Type.Array(
+          Type.Object({
+            text: Type.String({ description: "Paragraph text content." }),
+            heading: Type.Optional(
+              Type.Union(
+                [
+                  Type.Literal("Title"),
+                  Type.Literal("Heading1"),
+                  Type.Literal("Heading2"),
+                  Type.Literal("Heading3"),
+                  Type.Literal("normal"),
+                ],
+                { description: "Heading level. Default 'normal'." },
+              ),
+            ),
+            bold: Type.Optional(Type.Boolean({ description: "Bold text." })),
+            italic: Type.Optional(Type.Boolean({ description: "Italic text." })),
+            alignment: Type.Optional(
+              Type.Union(
+                [Type.Literal("left"), Type.Literal("center"), Type.Literal("right"), Type.Literal("justify")],
+                { description: "Text alignment." },
+              ),
+            ),
+            bullet: Type.Optional(Type.Boolean({ description: "Bullet list item." })),
+            fontSize: Type.Optional(Type.Number({ description: "Font size in points (default 11)." })),
+          }),
+          { description: "For 'generate' only. Array of paragraph specifications." },
+        ),
+      ),
+      tables: Type.Optional(
+        Type.Array(
+          Type.Object({
+            rows: Type.Array(
+              Type.Array(Type.String()),
+              { description: "Table rows, each row is an array of cell texts." },
+            ),
+            headerRow: Type.Optional(
+              Type.Boolean({ description: "Whether the first row is a header (bold, shaded). Default false." }),
+            ),
+            columnWidths: Type.Optional(
+              Type.Array(Type.Number(), { description: "Column widths in percentages (must sum to 100)." }),
+            ),
+          }),
+          { description: "For 'generate' only. Array of table specifications." },
+        ),
+      ),
+      creator: Type.Optional(
+        Type.String({ description: "For 'generate' only. Document creator metadata." }),
+      ),
+      description: Type.Optional(
+        Type.String({ description: "For 'generate' only. Document description metadata." }),
+      ),
+    }),
+    async execute(_toolCallId, params, _signal, onUpdate, _ctx) {
+      if (!docxTool) {
+        return errorResult("Docx tool not initialized");
+      }
+
+      const result = await docxTool.execute({
+        operation: params.operation as "parse" | "generate",
+        filePath: params.filePath as string,
+        title: params.title as string | undefined,
+        paragraphs: params.paragraphs as unknown as ParagraphSpec[] | undefined,
+        tables: params.tables as unknown as TableSpec[] | undefined,
+        creator: params.creator as string | undefined,
+        description: params.description as string | undefined,
+      });
+
+      onUpdate?.({
+        content: [{ type: "text" as const, text: `docx ${params.operation} → ${params.filePath}` }],
+        details: { progress: 80 },
+      });
+
+      if (!result.success) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${result.message}` }],
+          isError: true,
+          details: result,
+        };
+      }
+
+      if (params.operation === "parse") {
+        const text = result.text ?? "";
+        const preview = text.length > 2000 ? text.substring(0, 2000) + "\n...(truncated)" : text;
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: `Parsed '${params.filePath}': ${result.charCount} characters\n\n${preview}`,
+            },
+          ],
+          details: result,
+        };
+      }
+
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Generated '${result.filePath}': ${result.size} bytes`,
+          },
+        ],
         details: result,
       };
     },

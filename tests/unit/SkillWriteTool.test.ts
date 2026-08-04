@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { SkillWriteTool } from "../../src/tools/SkillWriteTool.js";
+import { SkillWriteTool, type SkillWriteParams } from "../../src/tools/SkillWriteTool.js";
 
 let sandboxDir: string;
 let tool: SkillWriteTool;
@@ -126,20 +126,20 @@ describe("SkillWriteTool", () => {
 
     it("should reject delete operation (not supported)", async () => {
       const result = await tool.edit({
-        operation: "delete" as any,
+        operation: "delete",
         path: "somefile.txt",
-      });
+      } as unknown as SkillWriteParams);
       assert.equal(result.success, false);
       assert.match(result.message, /not allowed/i);
     });
 
     it("should reject replace operation (not supported)", async () => {
       const result = await tool.edit({
-        operation: "replace" as any,
+        operation: "replace",
         path: "somefile.txt",
         oldString: "a",
         newString: "b",
-      } as any);
+      } as unknown as SkillWriteParams);
       assert.equal(result.success, false);
       assert.match(result.message, /not allowed/i);
     });

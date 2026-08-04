@@ -37,3 +37,8 @@ gouji_output_skill/
 # Word AI design docs (keep in repo)
 # word-ai-doc-review/
 # word-ai-doc-v2.2/
+
+# Temporary review/verification files
+IP_Assurance_extracted/
+SUPPLEMENTARY_FIXES.patch
+verification_report.html

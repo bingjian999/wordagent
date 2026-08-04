@@ -144,34 +144,41 @@ export class ShellTool {
         exitCode: 0,
         durationMs: Date.now() - startTime,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const e = err as Error & {
+        code?: string | number;
+        killed?: boolean;
+        signal?: string;
+        stdout?: string;
+        stderr?: string;
+      };
       const durationMs = Date.now() - startTime;
 
       // Timeout
-      if (err.killed === true || err.signal === "SIGTERM") {
+      if (e.killed === true || e.signal === "SIGTERM") {
         return {
           ok: false,
           command,
           args: validatedArgs,
           error: `Command timed out after ${timeout}ms`,
           timedOut: true,
-          exitCode: err.code,
-          stdout: err.stdout,
-          stderr: err.stderr,
+          exitCode: e.code as number | undefined,
+          stdout: e.stdout,
+          stderr: e.stderr,
           durationMs,
         };
       }
 
       // Non-zero exit code (command ran but returned an error)
-      if (err.code !== undefined && typeof err.code === "number") {
+      if (e.code !== undefined && typeof e.code === "number") {
         return {
           ok: false,
           command,
           args: validatedArgs,
-          error: `Command exited with code ${err.code}`,
-          exitCode: err.code,
-          stdout: err.stdout,
-          stderr: err.stderr,
+          error: `Command exited with code ${e.code}`,
+          exitCode: e.code,
+          stdout: e.stdout,
+          stderr: e.stderr,
           durationMs,
         };
       }
@@ -181,7 +188,7 @@ export class ShellTool {
         ok: false,
         command,
         args: validatedArgs,
-        error: err.message ?? String(err),
+        error: e.message ?? String(err),
         durationMs,
       };
     }

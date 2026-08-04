@@ -117,16 +117,16 @@ export class AuditLogger {
           } else {
             await fs.rename(from, to);
           }
-        } catch (err: any) {
-          if (err.code !== "ENOENT") throw err;
+        } catch (err: unknown) {
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
         }
       }
 
       // Rotate current log to .1
       await fs.rename(this.logPath, `${this.logPath}.1`);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // If log file doesn't exist yet, nothing to rotate
-      if (err.code !== "ENOENT") {
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
         // Swallow other errors — rotation is best-effort
       }
     }

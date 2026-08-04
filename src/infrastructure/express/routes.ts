@@ -1,8 +1,8 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import multer from "multer";
 import type { ServiceContainer } from "../../di/container.js";
 import { ErrorCode } from "../../domain/attachment/Result.js";
-import { asyncHandler, buildError, createRequireSessionId } from "./middleware.js";
+import { asyncHandler, buildError, createRequireSessionId, type AuthenticatedRequest } from "./middleware.js";
 
 /**
  * Create attachment API routes.
@@ -41,8 +41,8 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
     "/upload",
     upload.single("file"),
     asyncHandler(async (req, res) => {
-      const sessionId = (req as any).sessionId as string;
-      const file = (req as any).file as Express.Multer.File | undefined;
+      const sessionId = (req as AuthenticatedRequest).sessionId;
+      const file = (req as Request & { file?: Express.Multer.File }).file;
 
       if (!file) {
         res.status(400).json(buildError(ErrorCode.INVALID_INPUT, "No file provided in 'file' field"));
@@ -74,8 +74,8 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
     "/upload-batch",
     upload.array("files", services.config.maxBatchSize),
     asyncHandler(async (req, res) => {
-      const sessionId = (req as any).sessionId as string;
-      const files = (req as any).files as Express.Multer.File[] | undefined;
+      const sessionId = (req as AuthenticatedRequest).sessionId;
+      const files = (req as Request & { files?: Express.Multer.File[] }).files;
 
       if (!files || files.length === 0) {
         res.status(400).json(buildError("INVALID_INPUT" as ErrorCode, "No files provided in 'files' field"));
@@ -101,7 +101,7 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
   router.get(
     "/",
     asyncHandler(async (req, res) => {
-      const sessionId = (req as any).sessionId as string;
+      const sessionId = (req as AuthenticatedRequest).sessionId;
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
 
@@ -116,7 +116,7 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
   router.get(
     "/:id",
     asyncHandler(async (req, res) => {
-      const sessionId = (req as any).sessionId as string;
+      const sessionId = (req as AuthenticatedRequest).sessionId;
       const id = req.params.id;
 
       const result = await services.attachmentService.findById(sessionId, id);
@@ -136,7 +136,7 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
   router.get(
     "/:id/download",
     asyncHandler(async (req, res) => {
-      const sessionId = (req as any).sessionId as string;
+      const sessionId = (req as AuthenticatedRequest).sessionId;
       const id = req.params.id;
 
       const result = await services.attachmentService.readFile(sessionId, id);
@@ -160,7 +160,7 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
   router.get(
     "/:id/text",
     asyncHandler(async (req, res) => {
-      const sessionId = (req as any).sessionId as string;
+      const sessionId = (req as AuthenticatedRequest).sessionId;
       const id = req.params.id;
 
       const result = await services.attachmentService.readText(sessionId, id);
@@ -180,7 +180,7 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
   router.delete(
     "/:id",
     asyncHandler(async (req, res) => {
-      const sessionId = (req as any).sessionId as string;
+      const sessionId = (req as AuthenticatedRequest).sessionId;
       const id = req.params.id;
 
       const result = await services.attachmentService.delete(sessionId, id);
@@ -200,7 +200,7 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
   router.delete(
     "/",
     asyncHandler(async (req, res) => {
-      const sessionId = (req as any).sessionId as string;
+      const sessionId = (req as AuthenticatedRequest).sessionId;
       const confirm = req.query.confirm === "true";
 
       if (!confirm) {

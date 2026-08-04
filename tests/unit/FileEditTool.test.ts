@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
-import { FileEditTool } from "../../src/tools/FileEditTool.js";
+import { FileEditTool, type FileEditParams } from "../../src/tools/FileEditTool.js";
 
 let tempDir: string;
 let tool: FileEditTool;
@@ -358,10 +358,10 @@ describe("FileEditTool", () => {
   describe("general error handling", () => {
     it("should fail with an invalid operation name", async () => {
       const result = await tool.edit({
-        operation: "invalid_op" as any,
+        operation: "invalid_op",
         path: "somefile.txt",
         content: "test",
-      });
+      } as unknown as FileEditParams);
       assert.equal(result.success, false);
       assert.match(result.message, /invalid operation/i);
     });

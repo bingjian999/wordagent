@@ -8,6 +8,16 @@ import type { FileIntelligenceService } from "../parser/FileIntelligenceService.
 import type { AuditLogger } from "../audit/AuditLogger.js";
 
 /**
+ * Optional extension methods provided by FsAttachmentRepository.
+ * Used for runtime duck-typing checks (the interface itself does not declare these).
+ */
+type FsRepositoryExtensions = {
+  safeWriteFile?(sessionId: string, id: string, data: Buffer): Promise<string>;
+  readFile?(sessionId: string, id: string): Promise<Buffer>;
+  getFilePath_?(sessionId: string, id: string): Promise<string>;
+};
+
+/**
  * Attachment Service — business logic layer.
  *
  * Responsibilities:
@@ -103,9 +113,10 @@ export class AttachmentService {
     };
 
     // Write file content to disk (if using FsAttachmentRepository)
-    if (typeof (this.repository as any).safeWriteFile === "function") {
+    const fsRepo = this.repository as IAttachmentRepository & FsRepositoryExtensions;
+    if (typeof fsRepo.safeWriteFile === "function") {
       try {
-        await (this.repository as any).safeWriteFile(sessionId, id, input.content);
+        await fsRepo.safeWriteFile(sessionId, id, input.content);
       } catch {
         return err(ErrorCode.INTERNAL_ERROR);
       }
@@ -176,8 +187,9 @@ export class AttachmentService {
 
     try {
       // Use FsAttachmentRepository.readFile if available
-      if (typeof (this.repository as any).readFile === "function") {
-        const content = await (this.repository as any).readFile(sessionId, id);
+      const fsRepo = this.repository as IAttachmentRepository & FsRepositoryExtensions;
+      if (typeof fsRepo.readFile === "function") {
+        const content = await fsRepo.readFile(sessionId, id);
         return ok({ content, attachment: attachmentResult.value });
       }
       return err(ErrorCode.INTERNAL_ERROR);
@@ -194,8 +206,9 @@ export class AttachmentService {
     const exists = await this.repository.exists(sessionId, id);
     if (!exists) return err(ErrorCode.ATTACHMENT_NOT_FOUND);
 
-    if (typeof (this.repository as any).getFilePath_ === "function") {
-      const filePath = await (this.repository as any).getFilePath_(sessionId, id);
+    const fsRepo = this.repository as IAttachmentRepository & FsRepositoryExtensions;
+    if (typeof fsRepo.getFilePath_ === "function") {
+      const filePath = await fsRepo.getFilePath_(sessionId, id);
       return ok(filePath);
     }
     return err(ErrorCode.INTERNAL_ERROR);

@@ -78,7 +78,7 @@ interface HttpResponse {
   status: number;
   headers: http.IncomingHttpHeaders;
   body: Buffer;
-  json(): any;
+  json(): Record<string, unknown>;
 }
 
 async function request(
@@ -175,7 +175,7 @@ describe("Attachment API E2E", () => {
     it("should reject requests without x-session-id", async () => {
       const res = await request("GET", "/api/attachments");
       assert.equal(res.status, 400);
-      const data = res.json();
+      const data = res.json() as { error: { code: string } };
       assert.match(data.error.code, /SESSION/i);
     });
 
@@ -200,7 +200,7 @@ describe("Attachment API E2E", () => {
       });
 
       assert.equal(res.status, 201);
-      const data = res.json();
+      const data = res.json() as { attachment: Record<string, unknown> };
       assert.ok(data.attachment.id);
       assert.equal(data.attachment.originalName, "hello.txt");
       assert.equal(data.attachment.size, 17);
@@ -223,7 +223,7 @@ describe("Attachment API E2E", () => {
       });
 
       assert.equal(res.status, 400);
-      const data = res.json();
+      const data = res.json() as { error: { code: string } };
       assert.match(data.error.code, /EXTENSION/i);
     });
 
@@ -261,7 +261,7 @@ describe("Attachment API E2E", () => {
       });
 
       assert.equal(res.status, 200);
-      const data = res.json();
+      const data = res.json() as { uploaded: unknown[] };
       assert.ok(data.uploaded.length >= 1);
     });
   });
@@ -303,7 +303,7 @@ describe("Attachment API E2E", () => {
       });
 
       assert.equal(res.status, 201);
-      attachmentId = res.json().attachment.id;
+      attachmentId = (res.json() as { attachment: { id: string } }).attachment.id;
     });
 
     it("should get attachment by ID", async () => {
@@ -312,7 +312,7 @@ describe("Attachment API E2E", () => {
       });
 
       assert.equal(res.status, 200);
-      const data = res.json();
+      const data = res.json() as { attachment: Record<string, unknown> };
       assert.equal(data.attachment.id, attachmentId);
       assert.equal(data.attachment.originalName, "download.txt");
     });
@@ -362,7 +362,7 @@ describe("Attachment API E2E", () => {
       });
 
       assert.equal(res.status, 201);
-      attachmentId = res.json().attachment.id;
+      attachmentId = (res.json() as { attachment: { id: string } }).attachment.id;
     });
 
     it("should delete a single attachment", async () => {
@@ -412,7 +412,7 @@ describe("Attachment API E2E", () => {
       });
 
       assert.equal(res.status, 200);
-      const data = res.json();
+      const data = res.json() as { deleted: number };
       assert.ok(data.deleted >= 1);
     });
   });
@@ -450,7 +450,7 @@ describe("Attachment API E2E", () => {
       assert.equal(resA.status, 200);
       const dataA = resA.json();
       const itemsA = dataA.items ?? dataA.attachments ?? dataA;
-      const namesA = Array.isArray(itemsA) ? itemsA.map((a: any) => a.originalName) : [];
+      const namesA = Array.isArray(itemsA) ? itemsA.map((a: { originalName: string }) => a.originalName) : [];
       assert.ok(namesA.includes("isolation-a.txt"));
       assert.ok(!namesA.includes("isolation-b.txt"));
 
@@ -461,7 +461,7 @@ describe("Attachment API E2E", () => {
       assert.equal(resB.status, 200);
       const dataB = resB.json();
       const itemsB = dataB.items ?? dataB.attachments ?? dataB;
-      const namesB = Array.isArray(itemsB) ? itemsB.map((a: any) => a.originalName) : [];
+      const namesB = Array.isArray(itemsB) ? itemsB.map((a: { originalName: string }) => a.originalName) : [];
       assert.ok(namesB.includes("isolation-b.txt"));
       assert.ok(!namesB.includes("isolation-a.txt"));
     });

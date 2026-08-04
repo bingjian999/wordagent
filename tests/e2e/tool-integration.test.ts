@@ -187,8 +187,8 @@ describe("Tool Integration E2E", () => {
           content: "bad",
         });
         assert.fail("Should have rejected path traversal");
-      } catch (err: any) {
-        assert.match(err.message, /traversal|invalid|outside|sandbox/i);
+      } catch (err: unknown) {
+        assert.match(err instanceof Error ? err.message : String(err), /traversal|invalid|outside|sandbox/i);
       }
     });
   });
