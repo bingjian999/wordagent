@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word AI 附件功能与工具迁移 - 综合开发文档与交付计划 (v2.2)</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #ffffff;
+            --text-color: #1f2937;
+            --code-bg: #f3f4f6;
+            --border-color: #e5e7eb;
+            --red: #dc2626;
+            --red-bg: #fef2f2;
+            --orange: #ea580c;
+            --orange-bg: #fff7ed;
+            --green: #16a34a;
+            --green-bg: #f0fdf4;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.7;
+            color: var(--text-color);
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background: var(--bg-color);
+        }
+        h1, h2, h3, h4 { color: #111827; margin-top: 1.5em; margin-bottom: 0.5em; }
+        h1 { font-size: 2em; border-bottom: 2px solid var(--primary-color); padding-bottom: 10px; }
+        h2 { font-size: 1.5em; border-bottom: 1px solid var(--border-color); padding-bottom: 8px; margin-top: 2em; }
+        h3 { font-size: 1.2em; }
+        h4 { font-size: 1.05em; color: var(--primary-color); }
+        table { width: 100%; border-collapse: collapse; margin: 20px 0; font-size: 0.93em; }
+        th, td { border: 1px solid var(--border-color); padding: 10px 14px; text-align: left; }
+        th { background-color: var(--code-bg); font-weight: 600; }
+        tr:nth-child(even) { background-color: #f9fafb; }
+        code { background: var(--code-bg); padding: 2px 6px; border-radius: 4px; font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace; font-size: 0.88em; color: #7c3aed; }
+        pre { background: var(--code-bg); padding: 16px; border-radius: 8px; overflow-x: auto; border: 1px solid var(--border-color); }
+        pre code { background: none; padding: 0; color: var(--text-color); font-size: 0.85rem; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.8em; font-weight: bold; color: white; background: var(--primary-color); vertical-align: middle; margin-left: 8px; }
+        .badge-fix { background: var(--green); }
+        .note { background: #eff6ff; border-left: 4px solid var(--primary-color); padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; }
+        .warning { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; }
+        .danger { background: var(--red-bg); border-left: 4px solid var(--red); padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; }
+        .fixed { background: var(--green-bg); border-left: 4px solid var(--green); padding: 12px 16px; margin: 16px 0; border-radius: 0 4px 4px 0; }
+        .fixed::before { content: "FIXED "; font-weight: bold; color: var(--green); font-size: 0.8em; }
+        .changelog { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px 20px; margin: 16px 0; }
+        .changelog li { margin-bottom: 4px; }
+        .strike { text-decoration: line-through; color: #9ca3af; }
+        .new { color: var(--green); font-weight: 600; }
+        .table-wrap { overflow-x: auto; margin: 16px 0; }
+        .diff-old { color: var(--red); text-decoration: line-through; }
+        .diff-new { color: var(--green); font-weight: 600; }
+    </style>
+</head>
+<body>
+
+<h1>Word AI 附件功能与工具迁移综合文档 <span class="badge">v2.2 Revised</span></h1>
+<p><strong>项目：</strong>word-ai | <strong>框架：</strong>@earendil-works/pi-coding-agent | <strong>日期：</strong>2026-08-03</p>
+
+<div class="changelog">
+    <strong>v2.2 修订日志（基于技术评审报告）：</strong>
+    <ul>
+        <li><strong>[P0]</strong> MCP Tools 从"迁移"重新定义为"从零构建 MCP 集成扩展"，标记为可选交付，排期增加 1 天</li>
+        <li><strong>[P0]</strong> 并发安全论断修正：区分内存操作（单线程安全）与文件 I/O（需原子操作），补充原子写入模式</li>
+        <li><strong>[P0]</strong> sessionId 获取方式标记为"待 Phase 0 验证"，补充 <code>ctx.sessionManager</code> 替代方案</li>
+        <li><strong>[P1]</strong> 新增依赖注入策略（Repository 接口 + Extension 入口注入）</li>
+        <li><strong>[P1]</strong> 新增配置管理层（环境变量 + <code>.env.example</code>）</li>
+        <li><strong>[P1]</strong> Shell 沙箱扩展至 2 天，改用 <code>execFile</code> + 参数级白名单 + <code>AbortController</code></li>
+        <li><strong>[P1]</strong> DELETE 端点改为 <code>POST /clear</code> + 确认字段 + 审计日志</li>
+        <li><strong>[P1]</strong> 新增 API 速率限制（<code>express-rate-limit</code>）</li>
+        <li><strong>[P1]</strong> API 路径统一使用 <code>/api/v1/</code> 版本前缀</li>
+        <li><strong>[P1]</strong> 列表端点新增分页支持</li>
+        <li><strong>[P1]</strong> 负载测试前移至 Phase 1 完成后（50 并发初步验证）</li>
+        <li><strong>[P1]</strong> Phase 3 减载：排期从 3 天扩展至 4 天 + 2 天缓冲</li>
+        <li><strong>[P2]</strong> 新增标准化错误响应格式与错误码枚举</li>
+        <li><strong>[P2]</strong> 新增 CORS 配置说明</li>
+        <li><strong>[P2]</strong> 新增数据保留与自动清理策略</li>
+        <li><strong>[P2]</strong> 新增 CI/CD 管道规划（GitHub Actions）</li>
+        <li><strong>[P2]</strong> 新增 E2E 测试规划（Pi RPC 模式）</li>
+        <li><strong>[P2]</strong> 新增 Extension 生命周期管理（<code>session_start</code>/<code>session_shutdown</code>）</li>
+        <li><strong>排期</strong> 从 12 天扩展至 14 天，含 2 天缓冲</li>
+        <li><strong>DoD</strong> 追加 8 项验收条目</li>
+        <li><strong>风险表</strong> 新增 2 项风险 + 强化 3 项缓解措施</li>
+    </ul>
+</div>
+
+<h2>1. 总体评估与交付策略</h2>
+<p>项目严格遵循 Pi Agent "扩展优先" 原则，<strong>零修改 Core 代码</strong>。所有能力通过 Extension + Skill + HTTP Routes 实现。</p>
+
+<div class="note">
+    <strong>框架认知修正：</strong> Pi Agent 采用"原语而非功能"的设计哲学。Shell、Todo、MCP 均非内置功能，需通过 Extension 从零构建，而非"迁移"已有工具。文档中所有"迁移"措辞已统一改为"新建扩展实现"。
+</div>
+
+<h3>1.1 交付里程碑概览</h3>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>阶段</th><th>目标</th><th>周期</th><th>核心产出</th></tr></thead>
+    <tbody>
+        <tr><td><strong>Phase 0</strong></td><td>架构验证</td><td>Day 1-2</td><td>demo-extension, sessionId 隔离验证, 事件模型确认</td></tr>
+        <tr><td><strong>Phase 1</strong></td><td>附件平台</td><td>Day 3-5</td><td>完整CRUD API, 存储层, 安全加固, 集成测试, <span class="new">初步负载测试</span></td></tr>
+        <tr><td><strong>Phase 2</strong></td><td>文件智能+核心工具</td><td>Day 6-9</td><td>文本提取层, File/Todo/Calculator/Web工具新建, <span class="new">E2E 测试</span></td></tr>
+        <tr><td><strong>Phase 3</strong></td><td>高风险工具+加固</td><td>Day 10-12</td><td>Shell沙箱化(2天), <span class="new">MCP集成(可选)</span>, Skill-writing, 压力测试</td></tr>
+        <tr><td><span class="new">缓冲</span></td><td><span class="new">集成+收尾</span></td><td><span class="new">Day 13-14</span></td><td><span class="new">全量集成测试, Bug修复, 性能基线, RC版本</span></td></tr>
+    </tbody>
+</table>
+</div>
+
+<h3>1.2 推荐仓库布局 (Clean Architecture)</h3>
+<pre><code>src/
+  domain/attachment/      # 类型、实体、值对象 (原 src/types/)
+  services/attachment/    # 业务规则 (原 src/attachments/store.ts 逻辑层)
+  services/parser/        # 文本提取、预览、编码检测 (新增)
+  infrastructure/express/ # 路由、multer、控制器 (原 src/api/)
+  infrastructure/fs/      # 文件系统实现
+  <span class="new">config/                # 环境变量配置 + 默认值 (新增)
+  di/                    # 依赖注入容器 (新增)</span>
+extensions/               # pi.on('tool_call') 处理器 (薄层)
+skills/                   # SKILL.md 声明文件
+tests/                    # unit / integration / e2e
+  <span class="new">unit/                 # 单元测试
+  integration/          # 集成测试
+  e2e/                  # 端到端测试 (Pi RPC 模式)
+  load/                 # 负载测试脚本</span></code></pre>
+
+<h3>1.3 依赖注入策略 <span class="badge badge-fix">NEW</span></h3>
+<p>Clean Architecture 的核心是依赖倒置。上层 Service 不依赖下层 Repository 的具体实现，而是依赖接口：</p>
+<pre><code>// src/domain/attachment/IAttachmentRepository.ts
+export interface IAttachmentRepository {
+    save(sessionId: string, file: AttachmentInfo): Promise&lt;string&gt;;
+    findById(sessionId: string, id: string): Promise&lt;AttachmentInfo | null&gt;;
+    findBySession(sessionId: string, opts?: PaginationOpts): Promise&lt;AttachmentInfo[]&gt;;
+    delete(sessionId: string, id: string): Promise&lt;boolean&gt;;
+    deleteBySession(sessionId: string): Promise&lt;number&gt;;
+    exists(sessionId: string, id: string): Promise&lt;boolean&gt;;
+}
+
+// src/infrastructure/fs/FsAttachmentRepository.ts
+export class FsAttachmentRepository implements IAttachmentRepository { ... }
+
+// src/di/container.ts — Extension 入口处完成注入
+import { AttachmentService } from './services/attachment/AttachmentService';
+import { FsAttachmentRepository } from './infrastructure/fs/FsAttachmentRepository';
+
+export function createServices(config: AppConfig) {
+    const repo = new FsAttachmentRepository(config.storagePath);
+    const fileIntel = new FileIntelligenceService();
+    const attachmentService = new AttachmentService(repo, fileIntel, config);
+    return { attachmentService, repo, fileIntel };
+}
+
+// 测试时注入 MockRepository 即可隔离 Service 层
+const mockRepo = new MockAttachmentRepository();
+const service = new AttachmentService(mockRepo, mockFileIntel, testConfig);</code></pre>
+
+<h3>1.4 配置管理方案 <span class="badge badge-fix">NEW</span></h3>
+<pre><code>// src/config/index.ts
+export interface AppConfig {
+    storagePath: string;
+    maxFileSize: number;          // bytes, default 50MB
+    maxBatchSize: number;        // default 20
+    allowedExtensions: string[];
+    rateLimit: { windowMs: number; max: number };
+    sessionTtl: number;          // seconds, default 7 days
+    shellTimeout: number;       // ms, default 30000
+    corsOrigins: string[];
+}
+
+export function loadConfig(): AppConfig {
+    return {
+        storagePath: process.env.WORD_AI_STORAGE_PATH ?? './data/attachments',
+        maxFileSize: parseInt(process.env.WORD_AI_MAX_FILE_SIZE ?? '') || 50 * 1024 * 1024,
+        maxBatchSize: parseInt(process.env.WORD_AI_MAX_BATCH ?? '') || 20,
+        allowedExtensions: (process.env.WORD_AI_ALLOWED_EXT ?? 'pdf,txt,md,json,csv,docx,xlsx,png,jpg,gif').split(','),
+        rateLimit: {
+            windowMs: parseInt(process.env.WORD_AI_RATE_WINDOW ?? '') || 60000,
+            max: parseInt(process.env.WORD_AI_RATE_MAX ?? '') || 20
+        },
+        sessionTtl: parseInt(process.env.WORD_AI_SESSION_TTL ?? '') || 7 * 24 * 3600,
+        shellTimeout: parseInt(process.env.WORD_AI_SHELL_TIMEOUT ?? '') || 30000,
+        corsOrigins: (process.env.WORD_AI_CORS_ORIGINS ?? 'http://localhost:*').split(',')
+    };
+}</code></pre>
+<p>同时提供 <code>.env.example</code> 文件列出所有可配置项及其默认值。</p>
+
+<h2>2. Phase 0: 架构验证 (Days 1–2)</h2>
+<div class="warning"><strong>关键门禁：</strong> 在编写任何业务逻辑前，必须证明 Pi Agent 扩展模型支持所需能力。</div>
+
+<h3>2.1 交付物</h3>
+<ul>
+    <li><code>demo-extension/</code> 包含 hello-tool 和 echo-tool</li>
+    <li><span class="new">事件结构打印脚本：输出 <code>tool_call</code> 事件的完整字段列表</span></li>
+</ul>
+
+<h3>2.2 验证清单</h3>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>验证项</th><th>方法</th><th>状态</th></tr></thead>
+    <tbody>
+        <tr><td>tool_call 拦截 + bail 策略</td><td>注册 handler，返回 <code>{ block: true }</code> 验证拦截</td><td>✓ 已确认可行</td></tr>
+        <tr><td>非匹配工具返回 <code>undefined</code></td><td>在 handler 中判断 toolName，不匹配时 return</td><td>✓ 已确认可行</td></tr>
+        <tr><td><span class="diff-old">sessionId 从 event.sessionId 获取</span></td><td><span class="diff-old">原假设</span> → <span class="diff-new">Phase 0 实测验证</span></td><td><strong>待验证</strong></td></tr>
+        <tr><td><span class="new">ctx.sessionManager 作为替代方案</span></td><td><span class="new">通过 <code>ctx.sessionManager.getSessionFile()</code> 获取会话标识</span></td><td><span class="new">已确认为官方 API</span></td></tr>
+        <tr><td>Skills 按需触发</td><td>创建测试 SKILL.md，验证 <code>description</code> 字段控制隐式加载</td><td>✓ 已确认</td></tr>
+        <tr><td>HTTP路由与工具共享 Store</td><td>验证 Extension 和 Express 可访问同一 Service 实例</td><td>待验证</td></tr>
+        <tr><td>流式响应兼容</td><td>验证 <code>onUpdate</code> 回调在工具执行中的行为</td><td>待验证</td></tr>
+        <tr><td><span class="new">Extension 生命周期</span></td><td><span class="new">验证 <code>session_start</code> / <code>session_shutdown</code> 事件触发时机</span></td><td><span class="new">待验证</span></td></tr>
+    </tbody>
+</table>
+</div>
+
+<div class="danger">
+    <strong>P0 修正 — sessionId 获取方式：</strong><br>
+    原文档声称"直接从 <code>event.sessionId</code> 获取，无需 AsyncLocal"。<strong>此假设未经官方文档确认</strong>。Pi Agent <code>tool_call</code> 事件对象包含 <code>toolName</code> 和 <code>input</code>，但官方文档未提及 <code>sessionId</code> 字段。<br><br>
+    <strong>Phase 0 必须首先验证：</strong><br>
+    1. 打印 <code>tool_call</code> 事件的完整结构（<code>console.log(JSON.stringify(event))</code>）<br>
+    2. 如果 <code>event.sessionId</code> 存在 → 直接使用<br>
+    3. 如果不存在 → 使用 <code>ctx.sessionManager.getSessionFile()</code> 作为会话唯一标识<br>
+    4. 在 demo-extension 中实际验证跨会话隔离
+</div>
+
+<h3>2.3 验收标准</h3>
+<ul>
+    <li>✓ 真实会话中调用工具成功</li>
+    <li>✓ sessionId 隔离演示（<strong>无论通过 event 还是 sessionManager</strong>）</li>
+    <li>✓ 零 Core 修改</li>
+    <li><span class="new">✓ Extension 生命周期事件验证通过（<code>session_start</code> 初始化资源，<code>session_shutdown</code> 清理）</span></li>
+</ul>
+
+<h2>3. Phase 1: 附件平台 (Days 3–5)</h2>
+<p>构建稳固的存储+HTTP表面，不含AI智能逻辑。</p>
+
+<h3>3.1 数据模型与存储引擎</h3>
+<p>保留原 <code>AttachmentInfo</code> 接口定义及 <code>AttachmentStore</code> 实现。关键点：</p>
+
+<div class="fixed">
+    <strong>并发安全修正：</strong> 原文档声称"Node.js 单线程模型，await 间不中断，无需锁"。<strong>此论断部分错误</strong>，已修正为以下两层模型：
+</div>
+
+<div class="table-wrap">
+<table>
+    <thead><tr><th>层次</th><th>安全模型</th><th>说明</th></tr></thead>
+    <tbody>
+        <tr><td><strong>内存 Store</strong><br>(Map 操作)</td><td>单线程保护 ✓</td><td>JavaScript 同步代码段不中断，<code>Map.set()</code> / <code>Map.get()</code> 操作原子。无需锁。</td></tr>
+        <tr><td><strong>文件 I/O</strong><br>(fs 操作)</td><td><strong>需原子操作</strong></td><td><code>await</code> 是中断点，其他异步操作可在两个 await 之间插入。文件操作需使用"临时文件 + 原子重命名"模式。</td></tr>
+    </tbody>
+</table>
+</div>
+
+<p><strong>文件 I/O 原子写入模式：</strong></p>
+<pre><code>// 正确：临时文件 + 原子重命名
+async function safeWriteFile(targetPath: string, data: Buffer): Promise&lt;void&gt; {
+    const tmpPath = targetPath + '.tmp.' + crypto.randomUUID();
+    await fs.writeFile(tmpPath, data);        // 写入临时文件
+    await fs.rename(tmpPath, targetPath);     // 原子重命名
+}
+
+// 错误：存在 TOCTOU 竞态
+async function unsafeWrite(targetPath: string, data: Buffer) {
+    const exists = await fs.access(targetPath);  // ← 中断点 A
+    if (!exists) {
+        await fs.writeFile(targetPath, data);      // ← 中断点 B，另一请求可能已写入
+    }
+}</code></pre>
+
+<ul>
+    <li><strong>安全防护：</strong> <code>sanitize()</code> 防路径遍历；<code>ALLOWED_EXTENSIONS</code> 白名单（<span class="new">通过配置读取</span>）；50MB 双重限制（<span class="new">通过配置读取</span>）</li>
+    <li><strong>预览生成：</strong> <code>tryPreview()</code> 检测不可打印字符比例，防止二进制伪装</li>
+    <li><span class="new"><strong>数据保留：</strong> 每个 session 创建时记录时间戳；实现定期清理任务（默认保留 7 天，可通过 <code>WORD_AI_SESSION_TTL</code> 配置）；在 <code>session_shutdown</code> 事件中可选清理</span></li>
+</ul>
+
+<h3>3.2 HTTP API 端点</h3>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>方法</th><th>路径</th><th>功能</th><th>安全要求</th></tr></thead>
+    <tbody>
+        <tr><td>POST</td><td><code>/api/v1/attachments/upload</code></td><td>单文件上传</td><td>multer + sessionId必填 + <span class="new">速率限制(20/min)</span></td></tr>
+        <tr><td>POST</td><td><code>/api/v1/attachments/upload-batch</code></td><td>批量上传(≤20)</td><td>同上</td></tr>
+        <tr><td>GET</td><td><code>/api/v1/attachments</code></td><td>列表<span class="new">（分页）</span></td><td>session隔离</td></tr>
+        <tr><td>GET</td><td><code>/api/v1/attachments/:id/info</code></td><td>元数据+预览</td><td>session隔离</td></tr>
+        <tr><td>GET</td><td><code>/api/v1/attachments/:id</code></td><td>下载</td><td>session隔离 + <span class="new">速率限制(60/min)</span></td></tr>
+        <tr><td>DELETE</td><td><code>/api/v1/attachments/:id</code></td><td>删除单个</td><td>session隔离 + <span class="new">审计日志</span></td></tr>
+        <tr><td><span class="diff-old">DELETE</span> → <span class="diff-new">POST</span></td><td><span class="diff-old">/api/attachments</span> → <span class="diff-new"><code>/api/v1/attachments/clear</code></span></td><td>清空会话</td><td>session隔离 + <span class="new">请求体 <code>{ confirm: true }</code> + 审计日志</span></td></tr>
+    </tbody>
+</table>
+</div>
+
+<h4>分页响应格式 <span class="badge badge-fix">NEW</span></h4>
+<pre><code>// GET /api/v1/attachments?page=1&limit=20
+{
+    "items": [ /* AttachmentInfo[] */ ],
+    "total": 120,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 6
+}</code></pre>
+
+<h4>标准化错误响应格式 <span class="badge badge-fix">NEW</span></h4>
+<pre><code>// 所有错误统一返回以下结构
+{
+    "error": {
+        "code": "FILE_TOO_LARGE",       // 机器可读的错误码枚举
+        "message": "File exceeds 50MB limit",  // 人类可读描述
+        "details": {
+            "maxSize": 52428800,
+            "actualSize": 60000000
+        }
+    }
+}
+
+// 错误码枚举
+enum ErrorCode {
+    FILE_TOO_LARGE       = "FILE_TOO_LARGE",
+    INVALID_EXTENSION    = "INVALID_EXTENSION",
+    SESSION_NOT_FOUND    = "SESSION_NOT_FOUND",
+    ATTACHMENT_NOT_FOUND = "ATTACHMENT_NOT_FOUND",
+    RATE_LIMITED         = "RATE_LIMITED",
+    CLEAR_NOT_CONFIRMED  = "CLEAR_NOT_CONFIRMED",
+    INTERNAL_ERROR       = "INTERNAL_ERROR"
+}</code></pre>
+
+<h4>CORS 配置 <span class="badge badge-fix">NEW</span></h4>
+<pre><code>import cors from 'cors';
+
+// 使用配置中的 corsOrigins
+app.use(cors({
+    origin: config.corsOrigins,  // 默认 ['http://localhost:*']
+    methods: ['GET', 'POST', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));</code></pre>
+
+<h4>速率限制配置 <span class="badge badge-fix">NEW</span></h4>
+<pre><code>import rateLimit from 'express-rate-limit';
+
+const uploadLimiter = rateLimit({
+    windowMs: config.rateLimit.windowMs,  // 60000ms
+    max: config.rateLimit.max,           // 20 requests
+    keyGenerator: (req) =&gt; req.headers['x-session-id'] || req.ip,
+    message: { error: { code: 'RATE_LIMITED', message: 'Too many requests' } }
+});
+
+const downloadLimiter = rateLimit({
+    windowMs: 60000,
+    max: 60,
+    keyGenerator: (req) =&gt; req.headers['x-session-id'] || req.ip,
+});
+
+app.use('/api/v1/attachments/upload', uploadLimiter);
+app.use('/api/v1/attachments/upload-batch', uploadLimiter);
+app.use('/api/v1/attachments/:id', downloadLimiter); // GET 下载</code></pre>
+
+<h3>3.3 验收标准</h3>
+<ul>
+    <li>✓ 多并发会话下 CRUD 正常</li>
+    <li>✓ Service + Repository 单元测试覆盖率 ≥ 80%</li>
+    <li>✓ 集成测试：upload → list → info → download → delete 全链路绿</li>
+    <li>✓ 跨会话访问被拒绝</li>
+    <li><span class="new">✓ 初步负载测试通过：50 并发上传同一 session，无文件损坏</span></li>
+    <li><span class="new">✓ 速率限制生效：超过 20 次/分钟返回 429</span></li>
+    <li><span class="new">✓ 分页正确：返回结构包含 total/page/limit/totalPages</span></li>
+    <li><span class="new">✓ 错误格式统一：所有错误返回标准化结构</span></li>
+</ul>
+
+<h2>4. Phase 2: 文件智能 + 核心工具 (Days 6–9)</h2>
+<h3>4.1 文件智能层</h3>
+<p>将智能逻辑从存储层剥离，形成独立可复用模块：</p>
+<ul>
+    <li><code>extractText()</code> / <code>detectEncoding()</code> / <code>generatePreview()</code></li>
+    <li><code>chunkDocument()</code> / <code>calculateHash()</code> / <code>detectLanguage()</code></li>
+</ul>
+
+<h3>4.2 工具新建顺序 (依赖驱动)</h3>
+<div class="note">
+    <strong>措辞修正：</strong> 原文档使用"迁移"一词。Pi Agent 无内置 Shell、Todo、MCP 等功能，所有工具均为<strong>从零新建扩展实现</strong>。
+</div>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>#</th><th>工具集</th><th>实现方式</th><th>理由</th></tr></thead>
+    <tbody>
+        <tr><td>1</td><td>Attachment Tools</td><td>基于 Phase 1 已完成的 API 封装</td><td>Phase 1 已完成基础</td></tr>
+        <tr><td>2</td><td>File Tools</td><td>新建 Extension: <code>pi.registerTool()</code></td><td>最高依赖，几乎所有后续工具需要</td></tr>
+        <tr><td>3</td><td>Todo Tools</td><td>新建 Extension + TODO.md 模式</td><td>独立，低风险</td></tr>
+        <tr><td>4</td><td>Calculator</td><td>新建 Extension</td><td>独立，易测试</td></tr>
+        <tr><td>5</td><td><span class="new">Web Tools</span></td><td><span class="new">新建 Extension + AbortController 超时</span></td><td><span class="new">从 Phase 3 前移至此</span></td></tr>
+    </tbody>
+</table>
+</div>
+
+<h4>工具注册示例（Pi Agent 官方模式）</h4>
+<pre><code>import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+
+export default function (pi: ExtensionAPI) {
+    pi.registerTool({
+        name: "file_read",
+        label: "Read File",
+        description: "Read content from an uploaded attachment",
+        parameters: Type.Object({
+            attachmentId: Type.String({ description: "Attachment ID to read" }),
+        }),
+        async execute(toolCallId, params, signal, onUpdate, ctx) {
+            // 通过 ctx.sessionManager 获取会话标识
+            const sessionId = ctx.sessionManager.getSessionFile();
+            const result = await attachmentService.readText(sessionId, params.attachmentId);
+            if (!result.ok) {
+                return { content: [{ type: "text", text: `Error: ${result.error}` }], details: {} };
+            }
+            return {
+                content: [{ type: "text", text: result.text }],
+                details: { encoding: result.encoding, size: result.size }
+            };
+        },
+    });
+}</code></pre>
+
+<h4>SKILL.md 格式 <span class="badge badge-fix">CORRECTED</span></h4>
+<pre><code>---
+name: file-tools
+description: &gt;
+  File operations including read, write, and edit.
+  Use when the user asks to read, create, or modify files.
+allowed-tools: file_read file_write file_edit
+license: MIT
+---
+
+# File Tools
+
+## Usage
+- Use `file_read` to read attachment content
+- Use `file_write` to create new files
+- Use `file_edit` to modify existing files
+
+## Steps
+1. Identify the target file or attachment
+2. Call the appropriate tool
+3. Verify the result</code></pre>
+<p><strong>说明：</strong> <code>description</code> 字段控制隐式加载 — Pi Agent 根据此字段判断是否加载 Skill。<code>name</code> 必须与目录名一致，1-64 字符，小写字母+数字+连字符。</p>
+
+<h3>4.3 验收标准</h3>
+<ul>
+    <li>✓ Agent 能完成：上传PDF → 列表 → 读取文本 → 编辑衍生文件 → 下载结果</li>
+    <li>✓ 多会话隔离依然成立</li>
+    <li>✓ 每个工具有独立 SKILL.md 且仅触发时加载</li>
+    <li><span class="new">✓ E2E 测试通过：通过 Pi RPC 模式自动验证完整链路</span></li>
+</ul>
+
+<h4>E2E 测试方案 <span class="badge badge-fix">NEW</span></h4>
+<pre><code>// tests/e2e/attachment-flow.test.ts
+// 使用 Pi 的 print/json 模式进行 E2E 自动化测试
+import { execSync } from 'child_process';
+
+describe('E2E: Attachment Upload → Read → Download', () =&gt; {
+    it('should complete full flow via Pi agent', () =&gt; {
+        const result = execSync(
+            `pi -p --mode json "Upload the file test.pdf, then read its content"`
+        );
+        const events = JSON.parse(result.toString());
+        // 验证工具调用链
+        const toolCalls = events.filter(e =&gt; e.type === 'tool_call');
+        expect(toolCalls.some(t =&gt; t.toolName === 'attachment_upload')).toBe(true);
+        expect(toolCalls.some(t =&gt; t.toolName === 'file_read')).toBe(true);
+    });
+});</code></pre>
+
+<h2>5. Phase 3: 高风险工具 + 加固 (Days 10–12)</h2>
+
+<h3>5.1 高风险工具新建顺序 (风险升序)</h3>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>#</th><th>工具集</th><th>实现方式</th><th>关键注意事项</th></tr></thead>
+    <tbody>
+        <tr><td>6</td><td>Shell Tools</td><td>新建 Extension — <strong>沙箱化</strong></td><td><strong>必须沙箱化</strong>：<span class="new"><code>execFile</code> 而非 <code>exec</code>、参数级白名单、<code>AbortController</code> 超时、工作目录锁定</span></td></tr>
+        <tr><td>7</td><td><span class="diff-old">MCP Tools (迁移)</span> → <span class="diff-new">MCP 集成扩展 (从零构建)</span></td><td><span class="diff-old">使用 @modelcontextprotocol/sdk</span> → <span class="diff-new">新建 Extension + feature-flag</span></td><td><strong>可选交付</strong>：<span class="new">Pi 无内置 MCP，需从零构建。如超期则降级为 Skill 模式（CLI + README）。支持 feature-flag 禁用。</span></td></tr>
+        <tr><td>8</td><td>Skill-writing</td><td>新建 Extension</td><td>依赖前述基础设施</td></tr>
+    </tbody>
+</table>
+</div>
+
+<div class="danger">
+    <strong>P0 修正 — MCP 范围澄清：</strong><br>
+    原文档将 "MCP Tools" 列为需迁移的工具集。实际上 Pi Agent <strong>明确不内置 MCP 支持</strong>，设计哲学是通过 Skills（CLI + README）或自定义 Extension 替代。<br><br>
+    <strong>修订后的策略：</strong><br>
+    1. 将 MCP 标记为<strong>可选交付物</strong>，而非核心里程碑<br>
+    2. 排期增加 1 天用于 MCP SDK 集成（Day 12）<br>
+    3. 使用 <code>feature-flag</code> 控制，默认禁用<br>
+    4. 如时间不足，降级为 Skill 模式（CLI 工具 + README 文档）<br>
+    5. 在 <code>settings.json</code> 中配置启用：<code>{ "features": { "mcp": true } }</code>
+</div>
+
+<h3>5.2 Shell 沙箱化方案 <span class="badge badge-fix">EXPANDED</span></h3>
+<div class="warning">
+    <strong>P1 修正 — Shell 排期从 1 天扩展至 2 天（Day 10-11）。</strong> 原方案的"命令白名单"无法防止参数注入（如 <code>ls; rm -rf /</code>）。
+</div>
+
+<p><strong>沙箱化架构：</strong></p>
+<pre><code>// src/services/shell/CommandRegistry.ts
+interface CommandSpec {
+    name: string;
+    args: ArgSpec[];           // 参数模式定义
+    allowGlob?: boolean;       // 是否允许通配符
+    timeout?: number;          // 命令级超时
+}
+
+interface ArgSpec {
+    pattern: RegExp;           // 参数正则
+    required: boolean;
+    description: string;
+}
+
+// 白名单命令注册
+const COMMANDS: Record&lt;string, CommandSpec&gt; = {
+    'ls':    { name: 'ls',    args: [{ pattern: /^[\w./-]+$/, required: false, description: 'path' }] },
+    'cat':   { name: 'cat',   args: [{ pattern: /^[\w./-]+$/, required: true,  description: 'file' }] },
+    'grep':  { name: 'grep',  args: [
+        { pattern: /^[\w]+$/,        required: true,  description: 'pattern' },
+        { pattern: /^[\w./-]+$/,     required: true,  description: 'file' }
+    ]},
+    // ... 更多命令
+};
+
+// 执行器 — 使用 execFile 而非 exec，避免 shell 解析
+async function executeCommand(
+    cmd: string, args: string[], opts: { cwd: string; timeout: number }
+): Promise&lt;ShellResult&gt; {
+    // 1. 验证命令在白名单中
+    const spec = COMMANDS[cmd];
+    if (!spec) return { ok: false, error: `Command '${cmd}' not allowed` };
+
+    // 2. 验证每个参数匹配模式
+    for (let i = 0; i &lt; args.length; i++) {
+        const argSpec = spec.args[i];
+        if (!argSpec || !argSpec.pattern.test(args[i])) {
+            return { ok: false, error: `Argument '${args[i]}' not allowed for '${cmd}'` };
+        }
+    }
+
+    // 3. 使用 execFile 执行（不经过 shell，无注入风险）
+    const controller = new AbortController();
+    const timer = setTimeout(() =&gt; controller.abort(), opts.timeout);
+
+    try {
+        const { stdout, stderr } = await execFile(cmd, args, {
+            cwd: opts.cwd,           // 锁定工作目录
+            signal: controller.signal,
+            maxBuffer: 1024 * 1024,  // 1MB 输出限制
+            timeout: opts.timeout,
+        });
+        return { ok: true, stdout, stderr };
+    } finally {
+        clearTimeout(timer);
+    }
+}</code></pre>
+
+<p><strong>关键安全措施：</strong></p>
+<ul>
+    <li>使用 <code>child_process.execFile</code> 而非 <code>exec</code> — 避免 shell 字符串解析，杜绝命令注入</li>
+    <li>参数级白名单 — 每个参数通过正则验证，而非仅验证命令名</li>
+    <li><code>AbortController</code> + 超时（默认 30s，可配置）</li>
+    <li>工作目录锁定 — <code>cwd</code> 限制在项目目录内</li>
+    <li>输出大小限制 — <code>maxBuffer</code> 防止内存耗尽</li>
+    <li>参考 Pi 官方 sandbox 示例和 <code>permission-gate.ts</code> 扩展</li>
+</ul>
+
+<h3>5.3 非功能性测试</h3>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>测试项</th><th>规格</th><th>时机</th></tr></thead>
+    <tbody>
+        <tr><td><span class="new">初步并发</span></td><td><span class="new">50 同时上传</span></td><td><span class="new">Phase 1 完成后 (Day 5)</span></td></tr>
+        <tr><td>完整并发</td><td>100/500 同时上传</td><td>Phase 3 (Day 13)</td></tr>
+        <tr><td>大文件</td><td>50MB/100MB/500MB</td><td>Phase 3 (Day 13)</td></tr>
+        <tr><td>故障恢复</td><td>磁盘满、网络超时、权限拒绝、无效MIME、重复上传</td><td>Phase 3 (Day 13)</td></tr>
+        <tr><td><span class="new">Shell 安全</span></td><td><span class="new">注入测试（; | &amp; $() ` 等特殊字符）</span></td><td><span class="new">Phase 3 (Day 11)</span></td></tr>
+    </tbody>
+</table>
+</div>
+
+<h2>6. 修订排期表（14 天） <span class="badge badge-fix">UPDATED</span></h2>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>Day</th><th>交付物</th><th>对应阶段</th><th>变更说明</th></tr></thead>
+    <tbody>
+        <tr><td>1</td><td>demo extension, 事件模型验证, <span class="new">sessionId/sessionManager 验证</span></td><td>Phase 0</td><td>—</td></tr>
+        <tr><td>2</td><td>Phase 0完成 + Attachment领域模型 + Repository接口 <span class="new">+ DI方案 + 配置层</span></td><td>Phase 0→1</td><td><span class="new">新增 DI + Config</span></td></tr>
+        <tr><td>3</td><td>Upload/Download/List/Delete API + 基础Service</td><td>Phase 1</td><td>—</td></tr>
+        <tr><td>4</td><td>安全加固 + <span class="new">速率限制 + 分页 + 版本化</span> + 存储层单元测试</td><td>Phase 1</td><td><span class="new">新增速率限制等</span></td></tr>
+        <tr><td>5</td><td><span class="new">初步负载测试(50并发)</span> + Phase 1完成 (集成测试全绿)</td><td>Phase 1</td><td><span class="new">前移负载测试</span></td></tr>
+        <tr><td>6</td><td>文本提取 + 预览生成 (File Intelligence层)</td><td>Phase 2</td><td>—</td></tr>
+        <tr><td>7</td><td>File Tools Extension + SKILL.md</td><td>Phase 2</td><td>—</td></tr>
+        <tr><td>8</td><td>Todo + Calculator Extensions</td><td>Phase 2</td><td>—</td></tr>
+        <tr><td>9</td><td>Web Extension <span class="new">(HTML→MD + AbortController超时)</span> + <span class="new">E2E测试</span></td><td>Phase 2→3</td><td><span class="new">Web前移 + E2E</span></td></tr>
+        <tr><td>10</td><td>Shell Extension 沙箱化 <span class="new">(CommandRegistry + execFile + 参数白名单)</span></td><td>Phase 3</td><td><span class="new">扩展至2天</span></td></tr>
+        <tr><td>11</td><td><span class="new">Shell Extension 完善 + 安全审计 + 注入测试</span></td><td>Phase 3</td><td><span class="new">新增</span></td></tr>
+        <tr><td>12</td><td><span class="new">MCP集成(feature-flag, 可选) +</span> Skill-writing</td><td>Phase 3</td><td><span class="new">MCP标记可选</span></td></tr>
+        <tr><td><span class="new">13</span></td><td><span class="new">完整压力测试(500并发/500MB) + E2E回归 + Bug修复</span></td><td><span class="new">缓冲</span></td><td><span class="new">新增缓冲日</span></td></tr>
+        <tr><td><span class="new">14</span></td><td><span class="new">文档 + 性能基线 + Release Candidate</span></td><td><span class="new">缓冲</span></td><td><span class="new">新增缓冲日</span></td></tr>
+    </tbody>
+</table>
+</div>
+
+<h2>7. Definition of Done (DoD) <span class="badge badge-fix">UPDATED</span></h2>
+<p>每个阶段完成前必须满足：</p>
+<ul>
+    <li>✓ 核心服务单元测试覆盖率 &gt; 80%</li>
+    <li>✓ 集成测试覆盖完整请求流 (HTTP → Extension → Service → Storage)</li>
+    <li>✓ 零 Pi Agent Core 修改</li>
+    <li>✓ 所有公开API和工具具备结构化日志与错误处理</li>
+    <li>✓ 安全检查就位 (路径遍历、大小限制、MIME验证、Shell限制)</li>
+    <li>✓ 性能基线已记录</li>
+    <li>✓ 文档同步更新 (架构、API、扩展注册、部署)</li>
+    <li><span class="new">✓ 配置外部化：所有可配置参数通过环境变量读取，有 <code>.env.example</code></span></li>
+    <li><span class="new">✓ 速率限制：所有写入端点配备 per-session 速率限制</span></li>
+    <li><span class="new">✓ 审计日志：所有删除操作记录操作者、时间、目标 ID</span></li>
+    <li><span class="new">✓ 数据保留：附件有过期策略和自动清理机制</span></li>
+    <li><span class="new">✓ API 版本化：所有端点使用 <code>/api/v1/</code> 前缀</span></li>
+    <li><span class="new">✓ 错误标准化：统一错误响应格式，含错误码枚举</span></li>
+    <li><span class="new">✓ CI 管道：PR 合并前自动通过 lint + type-check + unit test</span></li>
+    <li><span class="new">✓ Extension 生命周期：遵循 <code>session_start</code> / <code>session_shutdown</code> 模型</span></li>
+</ul>
+
+<h4>CI/CD 管道配置 <span class="badge badge-fix">NEW</span></h4>
+<pre><code># .github/workflows/ci.yml
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test:unit -- --coverage
+      - run: npm run test:integration
+      - name: Coverage gate
+        run: |
+          COVERAGE=$(node -e "console.log(require('./coverage/coverage-summary.json').total.lines.pct)")
+          if (( $(echo "$COVERAGE &lt; 80" | bc -l) )); then
+            echo "Coverage $COVERAGE% is below 80% threshold"
+            exit 1
+          fi</code></pre>
+
+<h2>8. 风险与回滚 <span class="badge badge-fix">UPDATED</span></h2>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>风险</th><th>缓解措施</th><th>变更</th></tr></thead>
+    <tbody>
+        <tr><td>Pi Agent 事件模型异常</td><td>Phase 0 demo 先行验证；<span class="new">打印完整 event 结构，验证 sessionId 是否存在；准备 sessionManager 替代方案</span></td><td><span class="new">强化</span></td></tr>
+        <tr><td>Shell 安全问题</td><td><span class="new">使用 execFile 而非 exec；参数级白名单（正则）；AbortController 超时；工作目录锁定；参考 Pi sandbox 示例</span></td><td><span class="new">强化</span></td></tr>
+        <tr><td>大文件/并发问题</td><td><span class="new">Phase 1 完成后立即初步负载测试(50并发)；Phase 3 完整压力测试</span></td><td><span class="new">强化</span></td></tr>
+        <tr><td><span class="diff-old">MCP 外部故障</span></td><td><span class="diff-old">最后实现；支持 feature-flag 降级</span> → <span class="diff-new">标记为可选交付；从零构建；如超期降级为 Skill 模式(CLI+README)</span></td><td><span class="new">修正</span></td></tr>
+        <tr><td>范围蔓延 (OCR/Office解析)</td><td>保持 File Intelligence 层抽象；高级解析器延后</td><td>—</td></tr>
+        <tr><td><span class="new">文件 I/O 竞态条件</span></td><td><span class="new">使用临时文件+原子重命名模式；内存 Store 与文件 Store 分离测试；TOCTOU 场景纳入集成测试</span></td><td><span class="new">新增</span></td></tr>
+        <tr><td><span class="new">磁盘空间耗尽</span></td><td><span class="new">数据保留策略+定期清理；上传前检查可用空间；监控磁盘使用率告警</span></td><td><span class="new">新增</span></td></tr>
+    </tbody>
+</table>
+</div>
+<p><strong>回滚策略：</strong> 所有代码位于 Core 之外，移除或禁用对应 Extension/Skill/Route 即可干净回退。MCP 模块通过 feature-flag 禁用，不影响核心功能。</p>
+
+<h2>9. 附录：关键技术实现参考 <span class="badge badge-fix">CORRECTED</span></h2>
+<p>以下实现细节已根据 Pi Agent 官方文档进行校正：</p>
+<div class="table-wrap">
+<table>
+    <thead><tr><th>技术点</th><th>原描述</th><th>修正后</th></tr></thead>
+    <tbody>
+        <tr><td>Extension 模式</td><td><code>pi.on('tool_call', handler)</code>，非匹配返回 <code>undefined</code></td><td>✓ 正确。返回 <code>{ block: true, reason }</code> 可阻止执行</td></tr>
+        <tr><td>会话隔离</td><td><span class="diff-old">直接从 <code>event.sessionId</code> 获取</span></td><td><span class="diff-new">Phase 0 验证 <code>event.sessionId</code>；如不存在则用 <code>ctx.sessionManager.getSessionFile()</code></span></td></tr>
+        <tr><td>错误处理</td><td>工具层返回 <code>{ok: false, error: ...}</code>；HTTP层用状态码</td><td><span class="diff-new">工具层不变；HTTP层使用标准化错误格式 <code>{ error: { code, message, details } }</code></span></td></tr>
+        <tr><td>SKILL.md</td><td><span class="diff-old">frontmatter 声明 triggers</span></td><td><span class="diff-new">frontmatter 使用 <code>name</code> + <code>description</code> 字段；<code>description</code> 控制隐式加载；可选 <code>allowed-tools</code></span></td></tr>
+        <tr><td>安全函数</td><td><code>sanitize()</code> 过滤特殊字符；<code>safePath()</code> 限制工作区根目录</td><td>✓ 正确</td></tr>
+        <tr><td><span class="diff-old">MCP集成</span></td><td><span class="diff-old">使用 <code>@modelcontextprotocol/sdk</code>，异步初始化不阻塞主流程</span></td><td><span class="diff-new">Pi 无内置 MCP。需新建 Extension 集成 MCP SDK；标记为可选交付；feature-flag 控制；如超期降级为 Skill 模式</span></td></tr>
+        <tr><td><span class="new">Extension 生命周期</span></td><td><span class="new">—</span></td><td><span class="new">Factory 中不启动后台资源；延迟到 <code>session_start</code>；<code>session_shutdown</code> 中清理</span></td></tr>
+        <tr><td><span class="new">命令执行</span></td><td><span class="new">—</span></td><td><span class="new">使用 <code>pi.exec()</code> 方法或 <code>child_process.execFile</code>；避免 <code>exec</code> 防注入</span></td></tr>
+    </tbody>
+</table>
+</div>
+
+<h4>Extension 生命周期管理示例 <span class="badge badge-fix">NEW</span></h4>
+<pre><code>import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+export default function (pi: ExtensionAPI) {
+    let services: ReturnType&lt;typeof createServices&gt; | null = null;
+    let httpServer: import('http').Server | null = null;
+
+    // ✓ 正确：在 session_start 中初始化资源
+    pi.on("session_start", async (_event, ctx) =&gt; {
+        const config = loadConfig();
+        services = createServices(config);
+
+        // 启动 HTTP 服务器
+        httpServer = startHttpServer(services, config);
+        ctx.ui.notify("Attachment platform ready", "info");
+    });
+
+    // ✓ 正确：在 session_shutdown 中清理资源
+    pi.on("session_shutdown", async (_event, _ctx) =&gt; {
+        if (httpServer) {
+            await new Promise&lt;void&gt;(resolve =&gt; httpServer!.close(() =&gt; resolve()));
+            httpServer = null;
+        }
+        // 清理临时文件
+        if (services) {
+            await services.attachmentService.cleanupTempFiles();
+            services = null;
+        }
+    });
+
+    // ✗ 错误：不要在 factory 中启动后台资源
+    // httpServer = startHttpServer(...)  // ← 不可！
+}</code></pre>
+
+</body>
+</html>
