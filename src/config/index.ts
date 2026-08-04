@@ -22,10 +22,17 @@ export interface AppConfig {
   sessionTtl: number;
   /** Shell command timeout in milliseconds (default: 30s) */
   shellTimeout: number;
-  /** CORS allowed origins */
+  /** CORS allowed origins (supports wildcards, e.g. http://localhost:*) */
   corsOrigins: string[];
   /** HTTP server port (default: 3141) */
   httpPort: number;
+  /**
+   * Secret key for HMAC-based session token verification.
+   * If empty, session IDs are accepted without signature verification
+   * (suitable for localhost-only deployments). Set to a random string
+   * when deploying to non-local environments.
+   */
+  sessionSecret: string;
 }
 
 /**
@@ -46,5 +53,35 @@ export function loadConfig(): AppConfig {
     shellTimeout: parseInt(process.env.WORD_AI_SHELL_TIMEOUT ?? "") || 30000,
     corsOrigins: (process.env.WORD_AI_CORS_ORIGINS ?? "http://localhost:*").split(","),
     httpPort: parseInt(process.env.WORD_AI_HTTP_PORT ?? "") || 3141,
+    sessionSecret: process.env.WORD_AI_SESSION_SECRET ?? "",
+  };
+}
+
+/**
+ * Create a CORS origin validator function from wildcard patterns.
+ *
+ * The `cors` package does exact string matching on arrays, so patterns
+ * like `http://localhost:*` silently fail. This function converts
+ * wildcard patterns into a regex-based validator.
+ *
+ * @param patterns - Array of origin patterns (supports `*` wildcard)
+ * @returns A function compatible with cors({ origin: ... })
+ */
+export function createCorsOriginValidator(patterns: string[]): (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => void {
+  const regexes = patterns.map(pattern => {
+    const escaped = pattern
+      .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*");
+    return new RegExp("^" + escaped + "$");
+  });
+
+  return (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+    // Allow requests with no Origin header (same-origin, curl, etc.)
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    const allowed = regexes.some(regex => regex.test(origin));
+    callback(null, allowed);
   };
 }

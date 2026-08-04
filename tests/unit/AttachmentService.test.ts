@@ -25,6 +25,7 @@ before(async () => {
     shellTimeout: 30000,
     corsOrigins: ["*"],
     httpPort: 3141,
+    sessionSecret: "",
   };
 });
 

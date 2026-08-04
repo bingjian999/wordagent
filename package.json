@@ -4,7 +4,7 @@
   "description": "Word AI - Attachment platform and tool extensions for Pi Agent",
   "type": "module",
   "scripts": {
-    "lint": "eslint src/ extensions/ skills/",
+    "lint": "eslint src/ extensions/",
     "typecheck": "tsc --noEmit",
     "test:unit": "tsx --test tests/unit/*.test.ts",
     "test:integration": "tsx --test tests/integration/*.test.ts",
@@ -21,12 +21,15 @@
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "@eslint/js": "^9.0.0",
     "@types/express": "^4.17.21",
     "@types/multer": "^1.4.11",
     "@types/cors": "^2.8.17",
     "@types/uuid": "^9.0.8",
     "@types/node": "^20.11.0",
+    "eslint": "^9.0.0",
     "typescript": "^5.3.0",
+    "typescript-eslint": "^8.0.0",
     "tsx": "^4.7.0"
   },
   "pi": {

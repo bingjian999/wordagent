@@ -2,7 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import type { ServiceContainer } from "../../di/container.js";
 import { ErrorCode } from "../../domain/attachment/Result.js";
-import { asyncHandler, buildError, requireSessionId } from "./middleware.js";
+import { asyncHandler, buildError, createRequireSessionId } from "./middleware.js";
 
 /**
  * Create attachment API routes.
@@ -31,8 +31,8 @@ export function createAttachmentRouter(services: ServiceContainer): Router {
     },
   });
 
-  // All routes require session ID
-  router.use(requireSessionId);
+  // All routes require session ID (with HMAC verification when secret is configured)
+  router.use(createRequireSessionId(services.config.sessionSecret));
 
   // ================================================================
   // POST /api/attachments/upload — single file upload

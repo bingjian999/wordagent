@@ -1,4 +1,6 @@
 import * as path from "node:path";
+import * as pathWin from "node:path/win32";
+import * as pathPosix from "node:path/posix";
 
 /**
  * Characters that are always invalid in a path string.
@@ -6,6 +8,7 @@ import * as path from "node:path";
  * Mirrors the spirit of C# `Path.GetInvalidPathChars()`: ASCII control
  * characters (0x00–0x1F) plus `<`, `>`, `|`, and `"`.
  */
+// eslint-disable-next-line no-control-regex -- control chars are intentionally checked here (mirrors C# Path.GetInvalidPathChars)
 const INVALID_PATH_CHARS = /[\x00-\x1f<>|"]/;
 
 /**
@@ -27,6 +30,26 @@ const DRIVE_RELATIVE_PATTERN = /^[a-zA-Z]:[^\\/]/;
 const DRIVE_ABSOLUTE_PATTERN = /^[a-zA-Z]:[\\/]/;
 
 /**
+ * Determine the appropriate path module for a given input.
+ *
+ * - Windows drive-absolute paths (e.g. `C:\folder`) always use `path.win32`
+ *   so they are parsed correctly on any host.
+ * - POSIX absolute paths (e.g. `/home/user`) always use `path.posix`.
+ * - Relative paths use the host's native path module.
+ */
+function pathFor(p: string): path.PlatformPath {
+  if (DRIVE_ABSOLUTE_PATTERN.test(p)) {
+    return pathWin;
+  }
+  // Check for POSIX absolute path
+  if (p.startsWith("/")) {
+    return pathPosix;
+  }
+  // Relative path — use host platform
+  return path;
+}
+
+/**
  * PathResolver — resolve and validate filesystem paths.
  *
  * Ported from the C# `PathResolver` class. Responsibilities:
@@ -35,6 +58,13 @@ const DRIVE_ABSOLUTE_PATTERN = /^[a-zA-Z]:[\\/]/;
  * - Validate path characters and reject ambiguous drive-relative paths.
  * - Normalize the result with `path.resolve`.
  * - Ensure the resolved path points to a file, not a directory.
+ *
+ * Cross-platform support:
+ * - Windows drive-absolute paths (e.g. `C:\folder\file`) are recognized
+ *   on any platform using `path.win32`.
+ * - POSIX absolute paths (e.g. `/home/user/file`) are recognized on any
+ *   platform using `path.posix`.
+ * - Relative paths are resolved using the host platform's path module.
  *
  * Path-traversal safety is provided by:
  * - Rejecting invalid characters.
@@ -48,7 +78,7 @@ const DRIVE_ABSOLUTE_PATTERN = /^[a-zA-Z]:[\\/]/;
  * ```ts
  * const resolver = new PathResolver("C:\\projects\\app");
  * resolver.resolve("src/index.ts");
- * // -> "C:\\projects\\app\\src\\index.ts"
+ * // -> "C:\\projects\\app\\src\\index.ts"  (on Windows)
  *
  * resolver.resolve("C:\\other\\file.txt");
  * // -> "C:\\other\\file.txt"  (absolute paths are used directly)
@@ -57,6 +87,8 @@ const DRIVE_ABSOLUTE_PATTERN = /^[a-zA-Z]:[\\/]/;
 export class PathResolver {
   /** The absolute, normalized base directory for resolving relative paths. */
   private readonly baseDir: string;
+  /** The path module used for the base directory (win32 or posix). */
+  private readonly basePlatform: path.PlatformPath;
 
   /**
    * @param baseDir - Base directory used to resolve relative paths.
@@ -67,7 +99,9 @@ export class PathResolver {
     if (!baseDir) {
       throw new Error("Base directory cannot be null or empty.");
     }
-    this.baseDir = path.resolve(baseDir);
+    // Detect the platform style of baseDir for relative path resolution
+    this.basePlatform = pathFor(baseDir);
+    this.baseDir = this.basePlatform.resolve(baseDir);
   }
 
   /**
@@ -107,16 +141,22 @@ export class PathResolver {
       );
     }
 
-    // 4. Determine absolute vs relative
+    // 4. Select the appropriate path module for this input
+    const p = pathFor(inputPath);
+
+    // 5. Determine absolute vs relative
     const isAbsolute =
-      DRIVE_ABSOLUTE_PATTERN.test(inputPath) || path.isAbsolute(inputPath);
+      DRIVE_ABSOLUTE_PATTERN.test(inputPath) || p.isAbsolute(inputPath);
 
-    // 5. Resolve and normalize
+    // 6. Resolve and normalize
+    // For relative paths, use the base directory's platform module
+    // so that Windows base dirs resolve correctly on POSIX hosts.
+    const resolveModule = isAbsolute ? p : this.basePlatform;
     const resolved = isAbsolute
-      ? path.resolve(inputPath)
-      : path.resolve(this.baseDir, inputPath);
+      ? resolveModule.resolve(inputPath)
+      : resolveModule.resolve(this.baseDir, inputPath);
 
-    // 6. Ensure the path points to a file, not a directory
+    // 7. Ensure the path points to a file, not a directory
     this.ensureIsFilePath(resolved, inputPath);
 
     return resolved;
@@ -128,6 +168,10 @@ export class PathResolver {
    * Both paths should be absolute and normalized (use `path.resolve`).
    * Returns `true` when `target` equals `dir` or is a descendant of it.
    *
+   * Uses the appropriate path module (win32 or posix) based on the
+   * directory's path style, ensuring correct containment checks
+   * across platforms.
+   *
    * Note: Node's `path` module is case-sensitive even on Windows. If `dir`
    * and `target` use different casing for the same directory, this check
    * may return `false`. Ensure consistent casing for reliable results.
@@ -137,8 +181,9 @@ export class PathResolver {
    * @returns `true` when `target` is inside `dir`.
    */
   static contains(dir: string, target: string): boolean {
-    const rel = path.relative(dir, target);
-    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+    const p = pathFor(dir);
+    const rel = p.relative(dir, target);
+    return rel === "" || (!rel.startsWith("..") && !p.isAbsolute(rel));
   }
 
   /**
@@ -160,7 +205,8 @@ export class PathResolver {
       );
     }
     // Root paths (e.g. "/" or "C:\") have an empty basename.
-    if (path.basename(resolved).length === 0) {
+    const p = pathFor(resolved);
+    if (p.basename(resolved).length === 0) {
       throw new Error(
         `Path must point to a file, not a directory: "${resolved}"`,
       );

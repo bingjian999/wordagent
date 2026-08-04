@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import type { ServiceContainer } from "../../di/container.js";
+import { createCorsOriginValidator } from "../../config/index.js";
 import { createAttachmentRouter } from "./routes.js";
 import { errorHandler } from "./middleware.js";
 
@@ -9,7 +10,7 @@ import { errorHandler } from "./middleware.js";
  * Create and configure the Express application.
  *
  * Middleware stack (order matters):
- *   1. CORS — allow configured origins
+ *   1. CORS — allow configured origins (supports wildcards)
  *   2. JSON body parser
  *   3. Rate limiting — per-IP throttle
  *   4. Routes — /api/attachments/*
@@ -22,10 +23,10 @@ import { errorHandler } from "./middleware.js";
 export function createApp(services: ServiceContainer): Express {
   const app = express();
 
-  // 1. CORS
+  // 1. CORS — wildcard patterns are converted to regex validators
   app.use(
     cors({
-      origin: services.config.corsOrigins,
+      origin: createCorsOriginValidator(services.config.corsOrigins),
       methods: ["GET", "POST", "DELETE"],
       allowedHeaders: ["Content-Type", "x-session-id"],
       maxAge: 3600,

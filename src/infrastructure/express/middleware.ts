@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from "express";
 import { ErrorCode } from "../../domain/attachment/Result.js";
+import { verify as verifySessionToken } from "../../auth/SessionToken.js";
 
 /**
  * Standardized error response builder.
@@ -18,18 +19,40 @@ export function sendError(res: Response, status: number, code: ErrorCode, messag
 }
 
 /**
- * Middleware: extract session ID from header.
- * Required for all attachment endpoints.
+ * Middleware factory: create a session ID verification middleware.
+ *
+ * When `secret` is non-empty, the `x-session-id` header is treated as a
+ * signed token (`sessionId.hmacSignature`) and verified via HMAC-SHA256.
+ * When `secret` is empty (localhost-only mode), the header value is used
+ * directly without signature verification, preserving backward compatibility.
+ *
+ * @param secret - HMAC secret key. Empty string disables verification.
+ * @returns Express middleware that extracts and validates the session ID.
  */
-export function requireSessionId(req: Request, res: Response, next: NextFunction): void {
-  const sessionId = req.headers["x-session-id"] as string | undefined;
-  if (!sessionId || sessionId.trim().length === 0) {
-    sendError(res, 400, ErrorCode.SESSION_NOT_FOUND, "Missing x-session-id header");
-    return;
-  }
-  (req as any).sessionId = sessionId.trim();
-  next();
+export function createRequireSessionId(secret: string): (req: Request, res: Response, next: NextFunction) => void {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const token = req.headers["x-session-id"] as string | undefined;
+    if (!token || token.trim().length === 0) {
+      sendError(res, 400, ErrorCode.SESSION_NOT_FOUND, "Missing x-session-id header");
+      return;
+    }
+
+    const sessionId = verifySessionToken(token.trim(), secret);
+    if (sessionId === null) {
+      sendError(res, 401, ErrorCode.SESSION_NOT_FOUND, "Invalid or tampered session token");
+      return;
+    }
+
+    (req as any).sessionId = sessionId;
+    next();
+  };
 }
+
+/**
+ * Legacy middleware: extract session ID from header without signature verification.
+ * Kept for backward compatibility. Prefer `createRequireSessionId(secret)`.
+ */
+export const requireSessionId = createRequireSessionId("");
 
 /**
  * Async route handler wrapper — catches promise rejections.
