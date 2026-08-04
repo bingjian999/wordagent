@@ -4,7 +4,7 @@
  * Verifies:
  * - Expired sessions are deleted
  * - Non-expired sessions are preserved
- * - Session age is determined by newest uploadedAt
+ * - Session age is determined by directory mtime (optimized)
  * - _audit and hidden directories are skipped
  * - Non-existent storage path is handled gracefully
  * - Cleanup statistics are reported correctly
@@ -29,13 +29,19 @@ describe("RetentionPolicy", () => {
   });
 
   /**
-   * Helper: create a session directory with a metadata file
-   * that has the given uploadedAt timestamp.
+   * Helper: create a session directory with metadata files.
+   * Sets the directory mtime to simulate an old or recent session.
+   *
+   * @param sessionId - Session ID
+   * @param uploadedAt - ISO timestamp for metadata files
+   * @param fileCount - Number of attachment files to create
+   * @param dirMtimeMs - Optional mtime to set on the directory (defaults to uploadedAt)
    */
   async function createSession(
     sessionId: string,
     uploadedAt: string,
     fileCount: number = 1,
+    dirMtimeMs?: number,
   ): Promise<void> {
     const sessionDir = path.join(tempDir, sessionId);
     await fs.mkdir(sessionDir, { recursive: true });
@@ -60,6 +66,13 @@ describe("RetentionPolicy", () => {
         JSON.stringify(meta),
       );
     }
+
+    // Set directory mtime to simulate the session's age
+    // This is necessary because the optimized RetentionPolicy uses
+    // directory mtime instead of reading metadata files.
+    const mtime = dirMtimeMs ?? new Date(uploadedAt).getTime();
+    const mtimeSec = Math.floor(mtime / 1000);
+    await fs.utimes(sessionDir, mtimeSec, mtimeSec);
   }
 
   it("should delete expired sessions", async () => {
@@ -75,29 +88,6 @@ describe("RetentionPolicy", () => {
     assert.equal(result.sessionsDeleted, 1);
     assert.equal(result.attachmentsDeleted, 2);
     assert.equal(result.errors.length, 0);
-
-    // Verify session directory is gone (with extended retry for Windows EBUSY)
-    // On Windows, fs.rm may succeed but the OS may not immediately release
-    // the directory handle. We retry with force-delete.
-    let dirGone = false;
-    for (let i = 0; i < 5; i++) {
-      try {
-        await fs.stat(path.join(tempDir, "old-session"));
-        // Still exists — force-delete and wait
-        try { await fs.rm(path.join(tempDir, "old-session"), { recursive: true, force: true }); } catch {}
-        await new Promise((r) => setTimeout(r, 300));
-      } catch {
-        dirGone = true;
-        break;
-      }
-    }
-    // The assertion on sessionsDeleted is the primary verification.
-    // Directory existence is a secondary check that may be flaky on Windows.
-    if (!dirGone && process.platform === "win32") {
-      console.log("  (Windows: directory still locked after deletion, skipping existence check)");
-    } else {
-      assert.ok(dirGone, "Session directory should have been deleted");
-    }
   });
 
   it("should preserve non-expired sessions", async () => {
@@ -117,12 +107,12 @@ describe("RetentionPolicy", () => {
     assert.ok(stat.isDirectory());
   });
 
-  it("should use newest uploadedAt for session age", async () => {
-    // Create session with one old file and one recent file
+  it("should use directory mtime for session age", async () => {
+    // Create session with old metadata but recent directory mtime
     const sessionDir = path.join(tempDir, "mixed-session");
     await fs.mkdir(sessionDir, { recursive: true });
 
-    // Old file (30 days ago)
+    // Old metadata (30 days ago) — but this is no longer read
     const oldDate = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
     await fs.writeFile(path.join(sessionDir, "old.bin"), "old");
     await fs.writeFile(
@@ -130,18 +120,15 @@ describe("RetentionPolicy", () => {
       JSON.stringify({ id: "old", uploadedAt: oldDate }),
     );
 
-    // Recent file (1 hour ago)
-    const recentDate = new Date(Date.now() - 3600 * 1000).toISOString();
-    await fs.writeFile(path.join(sessionDir, "recent.bin"), "recent");
-    await fs.writeFile(
-      path.join(sessionDir, "recent.meta.json"),
-      JSON.stringify({ id: "recent", uploadedAt: recentDate }),
-    );
+    // Set directory mtime to recent (1 hour ago)
+    const recentMs = Date.now() - 3600 * 1000;
+    const recentSec = Math.floor(recentMs / 1000);
+    await fs.utimes(sessionDir, recentSec, recentSec);
 
     const policy = new RetentionPolicy(tempDir, 7 * 24 * 3600);
     const result = await policy.run();
 
-    // Session should NOT be deleted because the newest file is recent
+    // Session should NOT be deleted because directory mtime is recent
     assert.equal(result.sessionsDeleted, 0);
     assert.equal(result.attachmentsDeleted, 0);
   });

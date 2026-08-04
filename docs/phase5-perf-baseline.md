@@ -4,7 +4,7 @@
 
 | 项目 | 值 |
 |------|-----|
-| 测试日期 | 2026-08-04T06:42:34.295Z |
+| 测试日期 | 2026-08-04T07:29:08.056Z |
 | 运行平台 | win32 |
 | Node 版本 | v22.16.0 |
 | CPU | 22 cores |
@@ -14,26 +14,26 @@
 
 | # | 测试项 | 迭代次数 | 平均 (ms) | 最小 (ms) | 最大 (ms) | 吞吐量 |
 |---|--------|----------|----------|----------|----------|--------|
-| 1 | Upload 1KB file (sequential) | 50 | 143.86 | 92.38 | 211.13 | - |
-| 2 | Upload 1KB file (50 concurrent) | 50 | 100.80 | 0.00 | 0.00 | 9.9 ops/sec |
-| 3 | List attachments (100+ items) | 20 | 1811.06 | 1753.34 | 1958.56 | - |
-| 4 | Evaluate simple expression | 1000 | 0.02 | 0.01 | 0.62 | - |
-| 5 | Evaluate complex expression (万元 + %) | 1000 | 0.03 | 0.02 | 0.68 | - |
-| 6 | Write file (100 bytes) | 100 | 34.61 | 10.44 | 42.05 | - |
-| 7 | Execute hostname | 50 | 175.07 | 137.03 | 193.19 | - |
-| 8 | Scan 10+ sessions for expiry | 10 | 1982.42 | 1952.93 | 2011.51 | - |
-| 9 | Write audit log entry | 500 | 18.00 | 10.46 | 26.82 | - |
+| 1 | Upload 1KB file (sequential) | 50 | 118.37 | 100.05 | 136.05 | - |
+| 2 | Upload 1KB file (50 concurrent) | 50 | 70.38 | 0.00 | 0.00 | 14.2 ops/sec |
+| 3 | List attachments (100+ items) | 20 | 0.01 | 0.00 | 0.15 | - |
+| 4 | Evaluate simple expression | 1000 | 0.02 | 0.01 | 0.44 | - |
+| 5 | Evaluate complex expression (万元 + %) | 1000 | 0.02 | 0.01 | 0.28 | - |
+| 6 | Write file (100 bytes) | 100 | 27.35 | 20.75 | 43.23 | - |
+| 7 | Execute hostname | 50 | 139.75 | 107.99 | 178.53 | - |
+| 8 | Scan 10+ sessions for expiry | 10 | 11.69 | 10.09 | 14.67 | - |
+| 9 | Write audit log entry | 500 | 25.31 | 16.19 | 41.94 | - |
 
 ## 性能基线
 
 | 操作 | 基线指标 | 阈值 |
 |------|----------|------|
-| 单文件上传 (1KB) | avg 143.9ms | < 50ms |
-| 50 并发上传 | 9.9 ops/sec | > 100 ops/sec |
-| 简单表达式计算 | avg 0.024ms | < 1ms |
-| 复杂表达式计算 | avg 0.032ms | < 1ms |
-| Shell 命令执行 (hostname) | avg 175.1ms | < 200ms |
-| 保留策略扫描 (10+ sessions) | avg 1982.4ms | < 100ms |
+| 单文件上传 (1KB) | avg 118.4ms | < 50ms |
+| 50 并发上传 | 14.2 ops/sec | > 100 ops/sec |
+| 简单表达式计算 | avg 0.017ms | < 1ms |
+| 复杂表达式计算 | avg 0.020ms | < 1ms |
+| Shell 命令执行 (hostname) | avg 139.7ms | < 200ms |
+| 保留策略扫描 (10+ sessions) | avg 11.7ms | < 100ms |
 
 ## 结论
 

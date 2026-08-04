@@ -61,6 +61,7 @@ export class RetentionPolicy {
    *
    * Scans all session directories and deletes expired ones.
    * This method is safe to run concurrently — file deletion is idempotent.
+   * Directories are scanned in parallel for improved performance.
    *
    * @returns Cleanup statistics
    */
@@ -75,29 +76,45 @@ export class RetentionPolicy {
       const entries = await fs.readdir(this.storagePath, { withFileTypes: true });
       const now = Date.now();
 
-      for (const entry of entries) {
-        // Only process directories (session folders)
-        if (!entry.isDirectory()) continue;
-        // Skip internal directories (e.g., _audit)
-        if (entry.name.startsWith("_") || entry.name.startsWith(".")) continue;
+      // Filter session directories
+      const sessionDirs = entries.filter(
+        (e) => e.isDirectory() && !e.name.startsWith("_") && !e.name.startsWith(".")
+      );
 
-        sessionsScanned++;
-        const sessionDir = path.join(this.storagePath, entry.name);
+      sessionsScanned = sessionDirs.length;
 
-        try {
-          const lastActivity = await this.getLastActivity(sessionDir);
-          const ageMs = now - lastActivity;
+      // Process sessions in parallel (bounded concurrency)
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < sessionDirs.length; i += BATCH_SIZE) {
+        const batch = sessionDirs.slice(i, i + BATCH_SIZE);
+        const results = await Promise.all(
+          batch.map(async (entry) => {
+            const sessionDir = path.join(this.storagePath, entry.name);
+            try {
+              const lastActivity = await this.getLastActivity(sessionDir);
+              const ageMs = now - lastActivity;
 
-          if (ageMs > this.ttlMs) {
-            // Session expired — delete it
-            const fileCount = await this.countFiles(sessionDir);
-            await fs.rm(sessionDir, { recursive: true, force: true });
+              if (ageMs > this.ttlMs) {
+                const fileCount = await this.countFiles(sessionDir);
+                await fs.rm(sessionDir, { recursive: true, force: true });
+                this.logger.log(
+                  `[Retention] Expired session ${entry.name}: ${fileCount} attachments, age ${Math.round(ageMs / 1000 / 60)}min`
+                );
+                return { deleted: true, fileCount, error: null as string | null };
+              }
+              return { deleted: false, fileCount: 0, error: null as string | null };
+            } catch (err: any) {
+              return { deleted: false, fileCount: 0, error: `Session ${entry.name}: ${err.message}` as string | null };
+            }
+          })
+        );
+
+        for (const r of results) {
+          if (r.error) errors.push(r.error);
+          if (r.deleted) {
             sessionsDeleted++;
-            attachmentsDeleted += fileCount;
-            this.logger.log(`[Retention] Expired session ${entry.name}: ${fileCount} attachments, age ${Math.round(ageMs / 1000 / 60)}min`);
+            attachmentsDeleted += r.fileCount;
           }
-        } catch (err: any) {
-          errors.push(`Session ${entry.name}: ${err.message}`);
         }
       }
     } catch (err: any) {
@@ -114,39 +131,18 @@ export class RetentionPolicy {
   /**
    * Determine the last activity timestamp for a session directory.
    *
-   * Strategy:
-   * 1. Read all .meta.json files and find the newest `uploadedAt`
-   * 2. Fallback: use the directory's mtime
+   * Optimized strategy:
+   * 1. Use the directory's mtime as primary indicator (fast — single stat call)
+   * 2. This is accurate because directory mtime updates when files are added/deleted
+   *
+   * Previous strategy (reading all .meta.json files) was O(n) per session
+   * and caused severe performance issues with large datasets.
    *
    * @param sessionDir - Path to the session directory
    * @returns Timestamp in milliseconds since epoch
    */
   private async getLastActivity(sessionDir: string): Promise<number> {
     try {
-      const files = await fs.readdir(sessionDir);
-      const metaFiles = files.filter((f) => f.endsWith(".meta.json"));
-
-      if (metaFiles.length === 0) {
-        // No metadata — use directory mtime
-        const stat = await fs.stat(sessionDir);
-        return stat.mtimeMs;
-      }
-
-      let newest = 0;
-      for (const metaFile of metaFiles) {
-        try {
-          const content = await fs.readFile(path.join(sessionDir, metaFile), "utf-8");
-          const meta = JSON.parse(content);
-          const uploadedAt = new Date(meta.uploadedAt).getTime();
-          if (uploadedAt > newest) newest = uploadedAt;
-        } catch {
-          // Skip invalid metadata files
-        }
-      }
-
-      if (newest > 0) return newest;
-
-      // Fallback: directory mtime
       const stat = await fs.stat(sessionDir);
       return stat.mtimeMs;
     } catch {

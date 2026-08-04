@@ -6,12 +6,20 @@
  * and additional context.
  *
  * Log file location: {storagePath}/_audit/audit.log
+ * When the log file exceeds MAX_LOG_SIZE, it is rotated to audit.log.1
+ * and a new audit.log is started.
  *
  * @module AuditLogger
  */
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
+
+/** Maximum log file size before rotation (10 MB) */
+const MAX_LOG_SIZE = 10 * 1024 * 1024;
+
+/** Maximum number of rotated log files to keep */
+const MAX_ROTATED_FILES = 5;
 
 /**
  * Audit log entry for a destructive operation.
@@ -73,15 +81,54 @@ export class AuditLogger {
    * If the log file cannot be written, the error is silently swallowed
    * to avoid blocking the actual operation.
    *
+   * When the log file exceeds MAX_LOG_SIZE, it is rotated before writing.
+   *
    * @param entry - The audit entry to log
    */
   async log(entry: AuditEntry): Promise<void> {
     try {
       await this.ensureInit();
+      await this.rotateIfNeeded();
       const line = JSON.stringify(entry) + "\n";
       await fs.appendFile(this.logPath, line, "utf-8");
     } catch {
       // Best-effort: swallow errors to avoid blocking operations
+    }
+  }
+
+  /**
+   * Check if the log file needs rotation and rotate if necessary.
+   * Rotation renames audit.log → audit.log.1, audit.log.1 → audit.log.2, etc.
+   * Old files beyond MAX_ROTATED_FILES are deleted.
+   */
+  private async rotateIfNeeded(): Promise<void> {
+    try {
+      const stat = await fs.stat(this.logPath);
+      if (stat.size < MAX_LOG_SIZE) return;
+
+      // Shift rotated files: .N → .N+1
+      for (let i = MAX_ROTATED_FILES; i >= 1; i--) {
+        const from = `${this.logPath}.${i}`;
+        const to = `${this.logPath}.${i + 1}`;
+        try {
+          if (i === MAX_ROTATED_FILES) {
+            // Delete the oldest rotated file
+            await fs.unlink(from);
+          } else {
+            await fs.rename(from, to);
+          }
+        } catch (err: any) {
+          if (err.code !== "ENOENT") throw err;
+        }
+      }
+
+      // Rotate current log to .1
+      await fs.rename(this.logPath, `${this.logPath}.1`);
+    } catch (err: any) {
+      // If log file doesn't exist yet, nothing to rotate
+      if (err.code !== "ENOENT") {
+        // Swallow other errors — rotation is best-effort
+      }
     }
   }
 
@@ -137,20 +184,40 @@ export class AuditLogger {
   }
 
   /**
-   * Read all audit log entries.
+   * Read all audit log entries from the current and rotated log files.
    * Useful for administrative review.
    *
    * @returns Array of audit entries, oldest first
    */
   async readAll(): Promise<AuditEntry[]> {
+    const allEntries: AuditEntry[] = [];
+
+    // Read rotated files in reverse order (oldest first: .N, .N-1, ..., .1)
+    for (let i = MAX_ROTATED_FILES; i >= 1; i--) {
+      try {
+        const content = await fs.readFile(`${this.logPath}.${i}`, "utf-8");
+        const entries = content
+          .split("\n")
+          .filter((line) => line.trim().length > 0)
+          .map((line) => JSON.parse(line) as AuditEntry);
+        allEntries.push(...entries);
+      } catch {
+        // Rotated file doesn't exist — skip
+      }
+    }
+
+    // Read current log file
     try {
       const content = await fs.readFile(this.logPath, "utf-8");
-      return content
+      const entries = content
         .split("\n")
         .filter((line) => line.trim().length > 0)
         .map((line) => JSON.parse(line) as AuditEntry);
+      allEntries.push(...entries);
     } catch {
-      return [];
+      // Current log doesn't exist yet — skip
     }
+
+    return allEntries;
   }
 }
