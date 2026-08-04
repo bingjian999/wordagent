@@ -24,6 +24,12 @@ export interface ArgSpec {
   required: boolean;
   /** Human-readable description of what this argument represents. */
   description: string;
+  /**
+   * Whether this argument is a file/directory path that must be contained
+   * within the sandbox working directory. When true, ShellTool will resolve
+   * the path against `cwd` and verify it does not escape the sandbox.
+   */
+  isPath?: boolean;
 }
 
 /**
@@ -63,6 +69,8 @@ export interface ValidationResult {
   error?: string;
   command?: string;
   validatedArgs?: string[];
+  /** Just the positional arguments (no flags), in spec order. */
+  positionalArgs?: string[];
 }
 
 /**
@@ -219,7 +227,7 @@ export class CommandRegistry {
       };
     }
 
-    return { ok: true, command, validatedArgs };
+    return { ok: true, command, validatedArgs, positionalArgs };
   }
 
   /**
@@ -251,7 +259,7 @@ export class CommandRegistry {
     this.register({
       name: "ls",
       args: [
-        { pattern: PATH_PATTERN, required: false, description: "directory path" },
+        { pattern: PATH_PATTERN, required: false, description: "directory path", isPath: true },
       ],
       flags: [
         { name: "-l" },
@@ -269,7 +277,7 @@ export class CommandRegistry {
     this.register({
       name: "cat",
       args: [
-        { pattern: PATH_PATTERN, required: true, description: "file path" },
+        { pattern: PATH_PATTERN, required: true, description: "file path", isPath: true },
       ],
       flags: [
         { name: "-n" },
@@ -281,7 +289,7 @@ export class CommandRegistry {
     this.register({
       name: "head",
       args: [
-        { pattern: PATH_PATTERN, required: true, description: "file path" },
+        { pattern: PATH_PATTERN, required: true, description: "file path", isPath: true },
       ],
       flags: [
         { name: "-n", takesValue: true, valuePattern: /^\d+$/ },
@@ -293,7 +301,7 @@ export class CommandRegistry {
     this.register({
       name: "tail",
       args: [
-        { pattern: PATH_PATTERN, required: true, description: "file path" },
+        { pattern: PATH_PATTERN, required: true, description: "file path", isPath: true },
       ],
       flags: [
         { name: "-n", takesValue: true, valuePattern: /^\d+$/ },
@@ -305,7 +313,7 @@ export class CommandRegistry {
     this.register({
       name: "wc",
       args: [
-        { pattern: PATH_PATTERN, required: true, description: "file path" },
+        { pattern: PATH_PATTERN, required: true, description: "file path", isPath: true },
       ],
       flags: [
         { name: "-l" },
@@ -321,7 +329,7 @@ export class CommandRegistry {
       name: "grep",
       args: [
         { pattern: GREP_PATTERN, required: true, description: "search pattern" },
-        { pattern: PATH_PATTERN, required: true, description: "file path" },
+        { pattern: PATH_PATTERN, required: true, description: "file path", isPath: true },
       ],
       flags: [
         { name: "-i" },
@@ -340,7 +348,7 @@ export class CommandRegistry {
     this.register({
       name: "find",
       args: [
-        { pattern: PATH_PATTERN, required: true, description: "directory path" },
+        { pattern: PATH_PATTERN, required: true, description: "directory path", isPath: true },
         { pattern: WORD_PATTERN, required: false, description: "name pattern" },
       ],
       flags: [
@@ -355,7 +363,7 @@ export class CommandRegistry {
     this.register({
       name: "file",
       args: [
-        { pattern: PATH_PATTERN, required: true, description: "file path" },
+        { pattern: PATH_PATTERN, required: true, description: "file path", isPath: true },
       ],
       flags: [
         { name: "-b" },

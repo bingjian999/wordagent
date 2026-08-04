@@ -259,3 +259,107 @@ describe("ShellTool", () => {
     assert.ok(result.stdout!.length > 0, "Date should produce output");
   });
 });
+
+describe("ShellTool — path traversal prevention", () => {
+  it("should reject absolute path that escapes sandbox", async () => {
+    const result = await shellTool.execute("cat", ["/etc/hostname"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject ../ traversal that escapes sandbox", async () => {
+    const result = await shellTool.execute("cat", ["../../../../../etc/hostname"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject absolute path with ls", async () => {
+    const result = await shellTool.execute("ls", ["/etc"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject absolute path with head", async () => {
+    const result = await shellTool.execute("head", ["/etc/hostname"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject absolute path with tail", async () => {
+    const result = await shellTool.execute("tail", ["/etc/hostname"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject absolute path with wc", async () => {
+    const result = await shellTool.execute("wc", ["/etc/hostname"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject absolute path with grep file argument", async () => {
+    const result = await shellTool.execute("grep", ["pattern", "/etc/hostname"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject absolute path with find", async () => {
+    const result = await shellTool.execute("find", ["/etc"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject absolute path with file command", async () => {
+    const result = await shellTool.execute("file", ["/etc/hostname"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject ../ traversal with grep", async () => {
+    const result = await shellTool.execute("grep", ["pattern", "../../../etc/passwd"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should reject ../ traversal with find", async () => {
+    const result = await shellTool.execute("find", ["../../../"]);
+    assert.equal(result.ok, false);
+    assert.match(result.error!, /outside the sandbox/i);
+  });
+
+  it("should allow relative path within sandbox (cat on Unix)", { skip: isWindows }, async () => {
+    const result = await shellTool.execute("cat", ["test.txt"]);
+    assert.equal(result.ok, true);
+    assert.match(result.stdout!, /line 1/);
+  });
+
+  it("should allow ./ prefix within sandbox (cat on Unix)", { skip: isWindows }, async () => {
+    const result = await shellTool.execute("cat", ["./test.txt"]);
+    assert.equal(result.ok, true);
+    assert.match(result.stdout!, /line 1/);
+  });
+
+  it("should allow nested relative path within sandbox (cat on Unix)", { skip: isWindows }, async () => {
+    const result = await shellTool.execute("cat", ["subdir/nested.txt"]);
+    assert.equal(result.ok, true);
+    assert.match(result.stdout!, /nested content/);
+  });
+
+  it("should allow relative path within sandbox (grep on Unix)", { skip: isWindows }, async () => {
+    const result = await shellTool.execute("grep", ["line", "test.txt"]);
+    assert.equal(result.ok, true);
+    assert.match(result.stdout!, /line 1/);
+  });
+
+  it("should allow relative path within sandbox (find on Unix)", { skip: isWindows }, async () => {
+    const result = await shellTool.execute("find", ["."]);
+    assert.equal(result.ok, true);
+    assert.match(result.stdout!, /test\.txt/);
+  });
+
+  it("should allow relative path within sandbox (ls on Unix)", { skip: isWindows }, async () => {
+    const result = await shellTool.execute("ls", ["subdir"]);
+    assert.equal(result.ok, true);
+    assert.match(result.stdout!, /nested\.txt/);
+  });
+});

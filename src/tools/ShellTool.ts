@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import * as path from "node:path";
 import { CommandRegistry } from "../services/shell/CommandRegistry.js";
 
 const execFileAsync = promisify(execFile);
@@ -81,9 +82,10 @@ export class ShellTool {
    *
    * Steps:
    * 1. Validate the command and arguments against the whitelist.
-   * 2. Determine the timeout (command-specific or default).
-   * 3. Execute via `execFile` (no shell parsing).
-   * 4. Return structured result with stdout, stderr, exit code, and timing.
+   * 2. Validate path arguments are contained within the sandbox directory.
+   * 3. Determine the timeout (command-specific or default).
+   * 4. Execute via `execFile` (no shell parsing).
+   * 5. Return structured result with stdout, stderr, exit code, and timing.
    *
    * @param command - The command name (must be in the whitelist).
    * @param args - Arguments to pass to the command.
@@ -100,6 +102,21 @@ export class ShellTool {
         command,
         args,
         error: validation.error,
+        durationMs: Date.now() - startTime,
+      };
+    }
+
+    // 2. Validate path arguments are contained within cwd sandbox
+    const pathError = this.checkPathContainment(
+      validation.command!,
+      validation.positionalArgs ?? [],
+    );
+    if (pathError) {
+      return {
+        ok: false,
+        command,
+        args,
+        error: pathError,
         durationMs: Date.now() - startTime,
       };
     }
@@ -168,5 +185,54 @@ export class ShellTool {
         durationMs,
       };
     }
+  }
+
+  /**
+   * Check that all path-type arguments resolve to a location within the
+   * sandbox working directory (`cwd`).
+   *
+   * This prevents path traversal attacks where a command like `cat` is given
+   * an absolute path (e.g. `/etc/passwd`) or a relative path with `..`
+   * segments (e.g. `../../etc/passwd`) that escapes the sandbox.
+   *
+   * The check uses `path.resolve(cwd, arg)` to compute the absolute path,
+   * then verifies the resolved path starts with `cwd` (normalized).
+   * Symlink resolution is intentionally NOT performed — the check is purely
+   * lexical, which is sufficient to prevent the common traversal vectors.
+   *
+   * @param command - The validated command name.
+   * @param positionalArgs - Positional arguments (no flags), in spec order.
+   * @returns An error message if a path escapes the sandbox, or `null` if OK.
+   */
+  private checkPathContainment(
+    command: string,
+    positionalArgs: string[],
+  ): string | null {
+    const spec = this.registry.getSpec(command);
+    if (!spec) return null;
+
+    const normalizedCwd = path.resolve(this.cwd);
+
+    for (let j = 0; j < spec.args.length; j++) {
+      const argSpec = spec.args[j];
+      if (!argSpec.isPath) continue;
+
+      const argValue = positionalArgs[j];
+      if (argValue === undefined) continue;
+
+      // Resolve the path relative to cwd, then check containment
+      const resolved = path.resolve(normalizedCwd, argValue);
+
+      // Check if resolved path is within the sandbox directory
+      // (either equals cwd or is a descendant of cwd)
+      if (resolved !== normalizedCwd && !resolved.startsWith(normalizedCwd + path.sep)) {
+        return (
+          `Path '${argValue}' resolves to '${resolved}' which is outside ` +
+          `the sandbox directory '${normalizedCwd}'. Path traversal is not allowed.`
+        );
+      }
+    }
+
+    return null;
   }
 }
