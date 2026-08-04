@@ -106,6 +106,47 @@ describe("AttachmentService", () => {
       assert.equal(result.error, ErrorCode.INVALID_EXTENSION);
     });
 
+    it("should reject file without extension when whitelist is configured", async () => {
+      const strictConfig = { ...config, allowedExtensions: ["txt", "md"] };
+      const repo = new FsAttachmentRepository(tempDir);
+      const service = new AttachmentService(repo, new FileIntelligenceService(), strictConfig);
+
+      const result = await service.upload("noext-session", {
+        originalName: "README",
+        content: Buffer.from("no extension here"),
+      });
+
+      assert.ok(!result.ok, "Upload of extensionless file should be rejected");
+      assert.equal(result.error, ErrorCode.INVALID_EXTENSION);
+    });
+
+    it("should reject file with trailing dot when whitelist is configured", async () => {
+      const strictConfig = { ...config, allowedExtensions: ["txt", "md"] };
+      const repo = new FsAttachmentRepository(tempDir);
+      const service = new AttachmentService(repo, new FileIntelligenceService(), strictConfig);
+
+      const result = await service.upload("trailing-dot-session", {
+        originalName: "file.",
+        content: Buffer.from("trailing dot"),
+      });
+
+      assert.ok(!result.ok, "Upload of file with trailing dot should be rejected");
+      assert.equal(result.error, ErrorCode.INVALID_EXTENSION);
+    });
+
+    it("should accept file without extension when whitelist is empty", async () => {
+      const noWhitelistConfig = { ...config, allowedExtensions: [] };
+      const repo = new FsAttachmentRepository(tempDir);
+      const service = new AttachmentService(repo, new FileIntelligenceService(), noWhitelistConfig);
+
+      const result = await service.upload("noext-allow-session", {
+        originalName: "Makefile",
+        content: Buffer.from("all: build"),
+      });
+
+      assert.ok(result.ok, "Upload of extensionless file should succeed when no whitelist");
+    });
+
     it("should auto-detect MIME type from content", async () => {
       const service = createService();
       const pdfBuf = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34]);

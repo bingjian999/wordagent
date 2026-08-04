@@ -75,9 +75,12 @@ export class AttachmentService {
       return err(ErrorCode.FILE_TOO_LARGE);
     }
 
-    // Validate extension
+    // Validate extension — when a whitelist is configured, files without
+    // an extension (ext === "") must also be rejected. The previous check
+    // (`ext && ...`) short-circuited on empty string, allowing extensionless
+    // files to bypass the whitelist entirely.
     const ext = this.fileIntel.getExtension(input.originalName);
-    if (ext && this.config.allowedExtensions.length > 0 && !this.config.allowedExtensions.includes(ext)) {
+    if (this.config.allowedExtensions.length > 0 && !this.config.allowedExtensions.includes(ext)) {
       return err(ErrorCode.INVALID_EXTENSION);
     }
 
