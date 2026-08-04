@@ -1,0 +1,133 @@
+# CI/CD Pipeline for word-ai
+#
+# Runs type checking, linting, and tests on every push and pull request.
+# Tests run on both Ubuntu and Windows to ensure cross-platform compatibility.
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  # ================================================================
+  # Type Check + Lint (fast, runs first)
+  # ================================================================
+  check:
+    name: Type Check & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+  # ================================================================
+  # Unit Tests (cross-platform)
+  # ================================================================
+  unit-tests:
+    name: Unit Tests (${{ matrix.os }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+  # ================================================================
+  # Integration Tests (Ubuntu only — faster, sufficient coverage)
+  # ================================================================
+  integration-tests:
+    name: Integration Tests
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+  # ================================================================
+  # E2E Tests (cross-platform — verifies real HTTP + tool workflows)
+  # ================================================================
+  e2e-tests:
+    name: E2E Tests (${{ matrix.os }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+  # ================================================================
+  # Full Test Suite (Ubuntu — final gate)
+  # ================================================================
+  full-suite:
+    name: Full Test Suite
+    needs: [unit-tests, integration-tests, e2e-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run all tests
+        run: npm run test:all

@@ -1,11 +1,12 @@
 /**
- * Word AI - Phase 2 Tools Extension
+ * Word AI - Tools Extension
  *
  * Provides Pi Agent tools for general-purpose operations:
  *   - calc_eval_expression:  Evaluate arithmetic expressions with decimal precision
  *   - web_fetch:             Fetch public web URLs and return cleaned text
  *   - file_edit:             Edit local files (write/append/replace/replace_lines/delete)
  *   - skill_write:           Write files within the skills sandbox directory
+ *   - shell_exec:            Execute whitelisted shell commands in a sandbox
  *
  * All tools are registered with the Pi Agent Extension API and share
  * tool service instances initialized in session_start.
@@ -18,12 +19,14 @@ import { CalculatorTool } from "../../src/tools/CalculatorTool.js";
 import { WebFetchTool } from "../../src/tools/WebFetchTool.js";
 import { FileEditTool } from "../../src/tools/FileEditTool.js";
 import { SkillWriteTool } from "../../src/tools/SkillWriteTool.js";
+import { ShellTool } from "../../src/tools/ShellTool.js";
 
 // Module-level state for session-scoped tool instances
 let calcTool: CalculatorTool | null = null;
 let webFetchTool: WebFetchTool | null = null;
 let fileEditTool: FileEditTool | null = null;
 let skillWriteTool: SkillWriteTool | null = null;
+let shellTool: ShellTool | null = null;
 
 export default function (pi: ExtensionAPI) {
   // ================================================================
@@ -36,13 +39,16 @@ export default function (pi: ExtensionAPI) {
     webFetchTool = new WebFetchTool();
     fileEditTool = new FileEditTool(projectDir);
     skillWriteTool = new SkillWriteTool(path.join(projectDir, "skills"));
+    shellTool = new ShellTool(projectDir);
 
-    console.log("[Tools] Phase 2 tools initialized.");
+    console.log("[Tools] All tools initialized.");
     console.log(`[Tools]   file_edit base: ${projectDir}`);
     console.log(`[Tools]   skill_write sandbox: ${skillWriteTool.getSandboxDir()}`);
+    console.log(`[Tools]   shell_exec cwd: ${projectDir}`);
+    console.log(`[Tools]   shell_exec allowed: ${shellTool.listAllowedCommands().join(", ")}`);
 
     if (ctx.hasUI) {
-      ctx.ui.notify("Word AI: Phase 2 tools ready (calc, web_fetch, file_edit, skill_write)", "info");
+      ctx.ui.notify("Word AI: Tools ready (calc, web_fetch, file_edit, skill_write, shell_exec)", "info");
     }
   });
 
@@ -54,7 +60,8 @@ export default function (pi: ExtensionAPI) {
     webFetchTool = null;
     fileEditTool = null;
     skillWriteTool = null;
-    console.log("[Tools] Phase 2 tools cleaned up.");
+    shellTool = null;
+    console.log("[Tools] All tools cleaned up.");
   });
 
   // ================================================================
@@ -371,6 +378,93 @@ export default function (pi: ExtensionAPI) {
               (result.bytesWritten !== undefined ? `\nBytes: ${result.bytesWritten}` : ""),
           },
         ],
+        details: result,
+      };
+    },
+  });
+
+  // ================================================================
+  // Tool: shell_exec
+  // ================================================================
+  pi.registerTool({
+    name: "shell_exec",
+    label: "Execute Shell Command",
+    description:
+      "Execute a whitelisted shell command in a sandboxed environment. " +
+      "Only read-only commands are allowed (ls, cat, head, tail, wc, grep, find, file, echo, date, hostname, whoami). " +
+      "Commands are executed via execFile (no shell parsing) to prevent injection. " +
+      "Arguments are validated against regex patterns. " +
+      "The working directory is locked to the project directory.",
+    promptSnippet: "Execute safe read-only shell commands (ls, cat, grep, find, wc, head, tail, file, echo, date, hostname, whoami)",
+    promptGuidelines: [
+      "Use shell_exec for read-only file inspection and text search operations.",
+      "Only whitelisted commands are accepted; write/execute commands are blocked.",
+    ],
+    parameters: Type.Object({
+      command: Type.String({
+        description:
+          "The command to execute. Must be one of the allowed commands: " +
+          "ls, cat, head, tail, wc, grep, find, file, echo, date, hostname, whoami.",
+      }),
+      args: Type.Optional(
+        Type.Array(Type.String(), {
+          description:
+            "Arguments for the command. Each argument is validated against the command's allowed pattern. " +
+            "Shell metacharacters (;, |, &, $, backticks, etc.) are rejected.",
+        }),
+      ),
+    }),
+    async execute(_toolCallId, params, signal, onUpdate, _ctx) {
+      if (!shellTool) {
+        return errorResult("Shell tool not initialized");
+      }
+
+      const command = params.command as string;
+      const args = (params.args as string[]) ?? [];
+
+      onUpdate?.({
+        content: [{ type: "text" as const, text: `Executing: ${command} ${args.join(" ")}` }],
+        details: { progress: 20 },
+      });
+
+      const result = await shellTool.execute(command, args);
+
+      if (signal?.aborted) {
+        return { content: [{ type: "text" as const, text: "Cancelled" }], details: { cancelled: true } };
+      }
+
+      if (!result.ok) {
+        const lines = [
+          `Command: ${result.command ?? command}`,
+          result.timedOut ? `Timed out after ${result.durationMs}ms` : `Error: ${result.error}`,
+          result.exitCode !== undefined ? `Exit code: ${result.exitCode}` : "",
+          result.stdout ? `\nstdout:\n${result.stdout}` : "",
+          result.stderr ? `\nstderr:\n${result.stderr}` : "",
+          `Duration: ${result.durationMs}ms`,
+        ]
+          .filter(Boolean)
+          .join("\n");
+
+        return {
+          content: [{ type: "text" as const, text: lines }],
+          isError: true,
+          details: result,
+        };
+      }
+
+      const summary = [
+        `Command: ${result.command}`,
+        `Exit code: ${result.exitCode}`,
+        `Duration: ${result.durationMs}ms`,
+        "",
+        result.stdout ?? "(no output)",
+        result.stderr ? `\nstderr:\n${result.stderr}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      return {
+        content: [{ type: "text" as const, text: summary }],
         details: result,
       };
     },

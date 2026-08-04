@@ -4,12 +4,13 @@
   "description": "Word AI - Attachment platform and tool extensions for Pi Agent",
   "type": "module",
   "scripts": {
-    "lint": "eslint src/ extensions/",
+    "lint": "eslint src/ extensions/ tests/",
     "typecheck": "tsc --noEmit",
     "test:unit": "tsx --test tests/unit/*.test.ts",
     "test:integration": "tsx --test tests/integration/*.test.ts",
     "test:e2e": "tsx --test tests/e2e/*.test.ts",
-    "test": "npm run test:unit"
+    "test": "npm run test:unit",
+    "test:all": "tsx --test tests/unit/*.test.ts tests/integration/*.test.ts tests/e2e/*.test.ts"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^0.83.0",
