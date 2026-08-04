@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Runtime data
+data/
+/data/attachments/
+
+# Logs
+*.log
+
+# Environment
+.env
+
+# Test coverage
+coverage/
+
+# Pi Agent sessions
+.pi/sessions/
+
+# Test output files
+phase2-test-output.txt
+phase2-realtest-output.txt
+pi-stdout-capture.txt
+pi-stderr-capture.txt
+pi-full-test-output.txt
+
+# Trae HTML share packages
+.trae-html-share-packages/
+
+# Gouji output (unrelated data)
+gouji_output/
+gouji_output_skill/
+
+# Word AI doc review HTML (generated artifact)
+word-ai-doc-review/
+word-ai-doc-v2.2/

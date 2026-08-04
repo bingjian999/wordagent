@@ -1,0 +1,7 @@
+{
+  "extensions": [
+    "./extensions/demo",
+    "./extensions/tools"
+  ],
+  "enableSkillCommands": true
+}
